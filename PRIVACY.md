@@ -72,4 +72,6 @@ the extension's Chrome Web Store listing before the update ships.
 
 ## Contact
 
-<!-- Replace with the contact address you want published. -->
+Questions about this policy, or about the extension, go to the issue tracker of
+the project's public repository:
+<https://github.com/defann/flag-of-convenience/issues>.
