@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "My IP Flag",
+  "name": "Flag of Convenience",
   "version": "2.1.0",
   "description": "Shows the flag of the country your traffic appears to come from, an at-a-glance VPN and proxy check in your toolbar.",
   "minimum_chrome_version": "111",
@@ -12,7 +12,7 @@
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "My IP Flag",
+    "default_title": "Flag of Convenience",
     "default_icon": {
       "16": "icons/icon16.png",
       "24": "icons/icon24.png",

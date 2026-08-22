@@ -75,7 +75,7 @@ async function main() {
     }
   }
 
-  const staging = await mkdtemp(join(tmpdir(), 'my-ip-flag-'));
+  const staging = await mkdtemp(join(tmpdir(), 'flag-of-convenience-'));
   for (const rel of INCLUDE) {
     const dest = join(staging, rel);
     await mkdir(dirname(dest), { recursive: true });

@@ -126,7 +126,7 @@ function page({ title, body, scene, scale = 1.5 }) {
   </style>
   <body>
     <div class="copy">
-      <div class="brand"><img src="icons/icon128.png" alt=""><span>My IP Flag</span></div>
+      <div class="brand"><img src="icons/icon128.png" alt=""><span>Flag of Convenience</span></div>
       <h1>${title}</h1>
       <p>${body}</p>
     </div>
@@ -168,7 +168,7 @@ const PROMO = `<!doctype html><meta charset="utf-8"><style>
 </style>
 <body>
   <img src="icons/icon128.png" alt="">
-  <h1>My IP Flag</h1>
+  <h1>Flag of Convenience</h1>
   <p>The flag of the country your traffic comes from, right in the toolbar.</p>
   <div class="flags">🇳🇱 🇩🇪 🇧🇬 🇨🇭 🇯🇵</div>
 </body>`;
@@ -213,7 +213,7 @@ async function shoot(url, out, width, height, staging) {
 }
 
 async function main() {
-  const staging = await mkdtemp(join(tmpdir(), 'my-ip-flag-assets-'));
+  const staging = await mkdtemp(join(tmpdir(), 'flag-of-convenience-assets-'));
   await mkdir(STORE, { recursive: true });
 
   for (const dir of ['popup', 'lib', 'icons']) {

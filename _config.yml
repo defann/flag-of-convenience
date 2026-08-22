@@ -1,0 +1,13 @@
+# GitHub Pages: renders README.md as the landing page and PRIVACY.md as
+# /PRIVACY.html, which is the privacy policy URL the Chrome Web Store listing
+# points at.
+title: Flag of Convenience
+description: >-
+  A Chrome extension that flies the flag of the country your traffic sails
+  under - an at-a-glance VPN and proxy check in the toolbar.
+theme: jekyll-theme-cayman
+show_downloads: false
+exclude:
+  - tools
+  - package.json
+  - node_modules

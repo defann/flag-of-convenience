@@ -1,4 +1,7 @@
-# My IP Flag
+# Flag of Convenience
+
+A ship registered abroad sails under a *flag of convenience*. A VPN does the
+same thing to your traffic — this extension shows you which flag that is.
 
 A Manifest V3 Chrome extension that shows the flag of the country **your own
 traffic appears to come from** — the country websites see you as. Handy for
@@ -78,7 +81,7 @@ Requires Chrome 111 or newer (`chrome.alarms` promises, `AbortSignal.timeout`).
 npm test      # unit tests for parsing, sources and the consensus rules
 npm run icons # regenerate icons/ and the padded store icon
 npm run assets# rebuild store screenshots from the real popup
-npm run pack  # run tests, then build dist/my-ip-flag-<version>.zip
+npm run pack  # run tests, then build dist/flag-of-convenience-<version>.zip
 ```
 
 `npm run pack` stages only the runtime files, so the archive has `manifest.json`

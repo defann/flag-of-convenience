@@ -1,10 +1,10 @@
-# Privacy Policy — My IP Flag
+# Privacy Policy — Flag of Convenience
 
 _Last updated: 22 August 2026_
 
 ## What this extension does
 
-My IP Flag tells you which country your outbound internet traffic appears to
+Flag of Convenience tells you which country your outbound internet traffic appears to
 come from. To do that it asks a small set of public "what is my IP" services
 what address and country they see, and shows the resulting country's flag on the
 toolbar icon. Those checks run on your chosen interval, at browser start, when
