@@ -67,11 +67,37 @@ the confirmed country, so it does not flicker while sources disagree.
 
 See [PRIVACY.md](PRIVACY.md) for the policy text to publish alongside a listing.
 
-## Install from source
+## Install
 
-1. Open `chrome://extensions`.
-2. Enable "Developer mode" (top right).
-3. Choose "Load unpacked" and select this folder.
+The extension is not in the Chrome Web Store yet, so it is installed unpacked.
+Chrome deliberately refuses to install a `.zip` or `.crx` that did not come from
+the store, so double-clicking the archive will not work — this is the path:
+
+1. Download `flag-of-convenience-<version>.zip` from the
+   [latest release](https://github.com/defann/flag-of-convenience/releases/latest).
+2. Unzip it, and keep the folder somewhere permanent — Chrome loads the
+   extension from that folder on every start, so deleting it uninstalls the
+   extension. The folder must have `manifest.json` at its top level.
+3. Open `chrome://extensions` and turn on **Developer mode** (top right).
+4. Press **Load unpacked** and select the unzipped folder.
+5. Optional: click the puzzle-piece icon in the toolbar and pin the extension,
+   so the flag is always visible.
+
+The first check runs immediately; the flag replaces the placeholder icon within
+a few seconds. To update later, download the new zip, unpack it over the same
+folder and press the reload arrow on the extension's card.
+
+Chrome shows a "Disable developer mode extensions" warning at startup for any
+unpacked extension. It is about how the extension was installed, not about what
+it does, and it goes away once the extension is installed from the store.
+
+### From a clone
+
+```bash
+git clone https://github.com/defann/flag-of-convenience.git
+```
+
+Then load the cloned folder with **Load unpacked** as above.
 
 Requires Chrome 111 or newer (`chrome.alarms` promises, `AbortSignal.timeout`).
 
