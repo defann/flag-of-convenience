@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>My IP Flag</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main id="app">
+    <header class="hero">
+      <div id="hero-flag" class="hero-flag">🌐</div>
+      <div class="hero-text">
+        <h1 id="hero-country">Checking…</h1>
+        <p class="hero-sub" id="hero-sub">the country sites see you from</p>
+      </div>
+    </header>
+
+    <section id="error-box" class="box error hidden" role="alert"></section>
+    <section id="conflict-box" class="box warn hidden" role="status"></section>
+
+    <section class="ips hidden" id="ips"></section>
+    <p class="note hidden" id="rotation-note"></p>
+
+    <section class="meta-row">
+      <span id="checked-at">Not checked yet</span>
+      <button id="refresh" type="button">Refresh</button>
+    </section>
+
+    <section id="sources-section" class="hidden">
+      <h2>Sources</h2>
+      <ul id="sources"></ul>
+    </section>
+
+    <section id="history-section" class="hidden">
+      <div class="section-head">
+        <h2>Country changes</h2>
+        <button id="clear-history" type="button" class="link-button">Clear</button>
+      </div>
+      <ul id="history"></ul>
+    </section>
+
+    <section class="settings">
+      <label class="setting">
+        <span>Check every</span>
+        <select id="interval">
+          <option value="1">1 min</option>
+          <option value="5">5 min</option>
+          <option value="15">15 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </label>
+      <label class="setting">
+        <input type="checkbox" id="notify">
+        <span>Notify when the country changes</span>
+      </label>
+      <p class="note hidden" id="notify-note"></p>
+    </section>
+  </main>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite">Copied</div>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

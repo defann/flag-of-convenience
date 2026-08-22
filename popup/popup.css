@@ -1,0 +1,124 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1b1f24;
+  --muted: #667085;
+  --line: #e6e8ec;
+  --row: #f4f6f8;
+  --row-hover: #ecf0f3;
+  --accent: #2563eb;
+  --warn-bg: #fff4e0;
+  --warn-fg: #8a5300;
+  --error-bg: #fdecec;
+  --error-fg: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e2126;
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --line: #33373d;
+    --row: #282c33;
+    --row-hover: #2f343c;
+    --accent: #8ab4f8;
+    --warn-bg: #3a2f14;
+    --warn-fg: #fdd663;
+    --error-bg: #3b2223;
+    --error-fg: #f28b82;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 340px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+#app { padding: 14px; display: grid; gap: 12px; }
+
+.hero { display: flex; align-items: center; gap: 12px; }
+.hero-flag { font-size: 46px; line-height: 1; }
+.hero-flag.as-badge {
+  font-size: 18px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
+  width: 50px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+}
+.hero-text h1 { font-size: 18px; font-weight: 650; }
+.hero-sub { color: var(--muted); font-size: 12px; }
+
+.box { border-radius: 10px; padding: 9px 11px; font-size: 12px; }
+.box.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.box.error { background: var(--error-bg); color: var(--error-fg); }
+.box .mono { font-family: ui-monospace, Menlo, monospace; }
+
+.ips { display: grid; gap: 6px; }
+.ip-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; border: 0; border-radius: 10px;
+  background: var(--row); color: var(--fg);
+  padding: 8px 11px; font: inherit; cursor: pointer; text-align: left;
+}
+.ip-row:hover { background: var(--row-hover); }
+.ip-value {
+  font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+  overflow-wrap: anywhere; flex: 1;
+}
+.ip-cc { flex: none; font-size: 13px; color: var(--muted); }
+
+.note { color: var(--muted); font-size: 11.5px; margin-top: -6px; }
+
+.meta-row {
+  display: flex; align-items: center; justify-content: space-between;
+  color: var(--muted); font-size: 12px;
+}
+#refresh {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: transparent; color: var(--accent);
+  padding: 4px 12px; font: inherit; font-weight: 600; cursor: pointer;
+}
+#refresh:hover { background: var(--row); }
+#refresh:disabled { opacity: 0.55; cursor: default; }
+
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+
+.section-head { display: flex; align-items: baseline; justify-content: space-between; }
+.link-button {
+  border: 0; background: none; color: var(--accent);
+  font: inherit; font-size: 11px; cursor: pointer; padding: 0 0 6px;
+}
+.link-button:hover { text-decoration: underline; }
+
+#sources { list-style: none; display: grid; gap: 3px; }
+#sources li { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; }
+#sources .s-id { color: var(--muted); width: 76px; flex: none; }
+#sources .s-val { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+#sources .s-val.failed { color: var(--muted); font-family: inherit; font-style: italic; }
+
+#history { list-style: none; display: grid; gap: 4px; max-height: 132px; overflow-y: auto; }
+#history li { display: flex; align-items: baseline; gap: 7px; font-size: 12px; padding: 2px; }
+#history .h-time { color: var(--muted); font-size: 11px; flex: none; width: 92px; }
+#history .h-change { white-space: nowrap; flex: none; }
+
+.settings { display: grid; gap: 7px; border-top: 1px solid var(--line); padding-top: 10px; }
+.setting { display: flex; align-items: center; gap: 7px; font-size: 12px; min-height: 24px; }
+.setting select {
+  margin-left: auto; font: inherit;
+  background: var(--row); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px;
+}
+.setting input[type="checkbox"] { accent-color: var(--accent); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg);
+  border-radius: 8px; padding: 5px 12px; font-size: 12px;
+  transition: opacity 0.25s; pointer-events: none;
+}
+
+.hidden { display: none; }
+/* The toast keeps its box so the fade works, but leaves the a11y tree. */
+.toast.hidden { display: block; opacity: 0; visibility: hidden; }

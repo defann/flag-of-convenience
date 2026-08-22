@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "My IP Flag",
+  "version": "2.1.0",
+  "description": "Shows the flag of the country your traffic appears to come from, an at-a-glance VPN and proxy check in your toolbar.",
+  "minimum_chrome_version": "111",
+  "permissions": ["alarms", "storage"],
+  "optional_permissions": ["notifications"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "My IP Flag",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "24": "icons/icon24.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

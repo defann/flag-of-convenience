@@ -1,0 +1,13 @@
+{
+  "name": "my-ip-flag",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension showing the flag of your exit IP's country",
+  "scripts": {
+    "icons": "python3 tools/make-icons.py",
+    "test": "node tools/test.mjs",
+    "pack": "node tools/pack.mjs",
+    "assets": "node tools/make-store-assets.mjs"
+  }
+}
