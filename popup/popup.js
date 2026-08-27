@@ -118,6 +118,12 @@ function renderSources(state) {
     val.className = 's-val';
     if (s.ip) {
       val.textContent = s.cc ? `${s.ip} · ${withFlag(s.cc)}` : s.ip;
+    } else if (s.skipped) {
+      // Left alone on purpose: its connection can only close while nothing is
+      // asking it anything, and a connection that never closes keeps answering
+      // over the route that was current when it was opened.
+      val.classList.add('skipped');
+      val.textContent = 'resting — asked every 5 min';
     } else {
       val.classList.add('failed');
       val.textContent = `unavailable (${s.error ?? 'error'})`;
@@ -197,7 +203,12 @@ function render() {
 
   const conflict = $('conflict-box');
   const countries = (state.countries ?? []).join(', ');
-  if (state.conflict && state.sameIp) {
+  if (state.staleSockets) {
+    // Not a leak: the odd sources out were reached over connections the browser
+    // opened before the network changed and has been keeping alive since.
+    conflict.textContent = `Some sources still answer over connections opened before your network last changed (${countries}). The country comes from the source whose connection is reopened for every check.`;
+    conflict.classList.remove('hidden');
+  } else if (state.conflict && state.sameIp) {
     // One address, several answers: the geo databases disagree, nothing is wrong.
     conflict.textContent = `Sources disagree about this address (${countries}). Geo databases often differ on hosting ranges.`;
     conflict.classList.remove('hidden');

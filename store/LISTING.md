@@ -64,7 +64,7 @@ WHAT YOU GET
 
 HOW THE COUNTRY IS DECIDED
 
-Each check asks three independent public services in parallel — country.is, GeoJS and myip.com — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
+Each check asks five independent public services in parallel — country.is, GeoJS, seeip.org, ip-api.com and myip.com — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
 
 PRIVACY
 

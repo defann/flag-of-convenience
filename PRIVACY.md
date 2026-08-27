@@ -30,15 +30,28 @@ this extension. There is no account, no identifier, and no tracking.
 
 ## Third-party services
 
-Each check contacts these endpoints over HTTPS:
+Each check contacts these endpoints:
 
 - `https://api.country.is/` — country.is
 - `https://get.geojs.io/v1/ip/country.json` — GeoJS
+- `https://api.seeip.org/geoip` — seeip.org
+- `http://ip-api.com/json/?fields=status,message,countryCode,query` — ip-api.com
 - `https://api.myip.com/` — myip.com
 
 Requests are GET only, are sent with `credentials: 'omit'`, and carry no
 cookies, no page content, and no browsing history. Each service's own privacy
 policy governs what it does with the request it receives.
+
+One of them, ip-api.com, is reached over plain http: its free tier offers no
+https, and http is also what keeps that connection on HTTP/1.1, which the
+extension needs in order to close it after every check (the README explains
+why). That request and its answer travel unencrypted, so anyone on the network
+path can see it was made, and can read or alter the reply. What it carries is
+your own IP address and a two-letter country code — an address every hop on the
+path can see anyway — and the extension treats an answer received in the clear
+as the weaker witness: it can never move the displayed country unless an https
+source agrees. If you would rather that request were not made at all, the source
+can be dropped from `lib/sources.js` in a local build.
 
 ## What this extension never does
 

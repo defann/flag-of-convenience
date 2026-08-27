@@ -1,7 +1,7 @@
 // Service worker: periodically asks several public services which IP and
 // country they see, then paints the winning country's flag on the toolbar.
 
-import { probeAll } from './lib/sources.js';
+import { probeAll, dropConnections } from './lib/sources.js';
 import { consensus } from './lib/consensus.js';
 import { flagEmoji, countryName, iconImageData, supportsFlagEmoji } from './lib/flags.js';
 
@@ -17,6 +17,13 @@ const INTERVALS = [1, 5, 15, 60];
 const TAB_CHECK_COOLDOWN_MS = 30_000;
 // Backoff for the one-shot retry while every source is unreachable, in minutes.
 const RETRY_DELAYS = [1, 2, 5, 10, 15];
+// How rarely the sources whose connection cannot be forced shut are queried,
+// whatever the check interval. Their socket only closes while nothing is asking
+// them anything, and a socket that never closes is one that keeps leaving
+// through the route that was current when it was opened - which is exactly how
+// a source ends up reporting the country from before a VPN was switched on.
+// Between these rounds a check rests on the source dropConnections() can close.
+const SLOW_SOURCE_GAP_MS = 5 * 60_000;
 
 // ---------- Settings ----------
 
@@ -74,12 +81,17 @@ async function checkIfStale(reason, maxAgeMs) {
 }
 
 async function doCheck(reason) {
-  const sources = await probeAll();
-  const verdict = consensus(sources);
-
   const stored = await chrome.storage.local.get(['state', 'history']);
   const prev = stored.state ?? null;
   const history = stored.history ?? [];
+
+  const full = !prev?.fullCheckAt || Date.now() - prev.fullCheckAt >= SLOW_SOURCE_GAP_MS;
+  const sources = await probeAll(undefined, full ? null : (s) => s.http1);
+  // Right after the answers are in, and before anything can be waiting on the
+  // sockets again: this is what stops the next check from being answered over
+  // a connection that predates a VPN switch. See dropConnections().
+  await dropConnections().catch(() => {});
+  const verdict = consensus(sources);
 
   if (!verdict.ok) {
     // Every source failed: keep the previous reading, mark it stale and
@@ -135,9 +147,11 @@ async function doCheck(reason) {
     votes: verdict.votes,
     total: verdict.total,
     responded: verdict.responded,
+    staleSockets: verdict.staleSockets,
     sources,
     stableCc,
     pendingCc,
+    fullCheckAt: full ? Date.now() : prev?.fullCheckAt ?? 0,
     retryStep: 0,
     checkedAt: Date.now(),
     error: null,
@@ -196,10 +210,12 @@ async function applyIcon(state) {
   let color = '#e37400';
   if (state.error) {
     text = '!';
-  } else if (state.conflict && !state.sameIp) {
+  } else if (state.conflict && !state.sameIp && !state.staleSockets) {
     // Different addresses AND different countries: part of the traffic really
     // is taking another route. Sources disagreeing about one single address is
-    // just a geo-database difference and gets no badge.
+    // just a geo-database difference and gets no badge, and neither does the
+    // known-harmless case where the odd ones out are answering over sockets
+    // that outlived a network change.
     text = '≠';
     color = '#d93025';
   }

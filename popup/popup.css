@@ -97,6 +97,7 @@ h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: 
 #sources .s-id { color: var(--muted); width: 76px; flex: none; }
 #sources .s-val { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
 #sources .s-val.failed { color: var(--muted); font-family: inherit; font-style: italic; }
+#sources .s-val.skipped { color: var(--muted); font-family: inherit; }
 
 #history { list-style: none; display: grid; gap: 4px; max-height: 132px; overflow-y: auto; }
 #history li { display: flex; align-items: baseline; gap: 7px; font-size: 12px; padding: 2px; }

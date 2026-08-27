@@ -28,14 +28,16 @@ changed; when the notification fires, the tunnel probably dropped.
 
 ## How it works
 
-Every check queries three independent services in parallel, each returning the
+Every check queries five independent services in parallel, each returning the
 exit IP and its country in one response:
 
-| Source | Endpoint |
-| --- | --- |
-| country.is | `https://api.country.is/` |
-| GeoJS | `https://get.geojs.io/v1/ip/country.json` |
-| myip.com | `https://api.myip.com/` |
+| Source | Endpoint | |
+| --- | --- | --- |
+| country.is | `https://api.country.is/` | |
+| GeoJS | `https://get.geojs.io/v1/ip/country.json` | |
+| seeip.org | `https://api.seeip.org/geoip` | HTTP/1.1, connection dropped after every check |
+| ip-api.com | `http://ip-api.com/json/?fields=status,message,countryCode,query` | HTTP/1.1, connection dropped after every check |
+| myip.com | `https://api.myip.com/` | |
 
 The country is decided by majority vote, which matters for two reasons found in
 practice:
@@ -51,6 +53,41 @@ A country backed by a majority is applied immediately. One that merely went
 uncontested — a single reachable source — has to be confirmed by the next check.
 A genuinely split reading is never promoted on its own. The toolbar icon follows
 the confirmed country, so it does not flicker while sources disagree.
+
+### Connections that outlive a VPN switch
+
+Chrome keeps HTTP connections alive between checks, and a socket opened before a
+VPN was switched on keeps leaving through the old route. The service then
+answers with the address the browser used to exit from, and pressing Refresh
+changes nothing: the request travels down the same socket. Nothing is cached —
+the wrong answer is genuinely fetched, over the wrong route.
+
+The only lever an extension has over the socket pool is an aborted request: an
+unfinished exchange leaves the connection unusable, so Chrome closes it and the
+next check has to dial out again. That works on HTTP/1.1 only — over HTTP/2 an
+abort resets a single stream and leaves the session open — so two sources are
+deliberately kept on servers that speak HTTP/1.1, and their sockets are dropped
+after every check. `seeip.org` speaks it over https; `ip-api.com` offers nothing
+but plain http on its free tier, which is exactly what pins it to HTTP/1.1.
+
+The other three cannot be closed that way, so instead they are left alone: a
+full round is run at most once every five minutes, whatever the check interval,
+and the checks in between rest on the HTTP/1.1 pair. A connection only closes
+while nothing is asking it anything, so the pause is what keeps those sources
+from being stuck on one socket forever when checks run every minute.
+
+Those two are therefore the only ones certain to have answered over the current
+route. When they agree with each other, and every remaining source reports both
+a different address *and* a different country, the others are answering over
+sockets that outlived a network change: their majority is a majority about the
+past, and it is overruled at once instead of waiting for agreement that would
+never arrive. One shared address with two countries stays what it always was —
+the geo databases disagreeing — and several addresses in one country stay a
+rotating exit pool.
+
+An answer fetched over plain http can be rewritten in transit, so it never
+carries that decision alone: at least one of the agreeing fresh readings has to
+have arrived over https before the rest are declared stale.
 
 ### Privacy properties
 
@@ -136,6 +173,15 @@ tools/pack.mjs       upload package builder
   created by MaxMind, available from https://www.maxmind.com.
 - **GeoJS** (geojs.io) — free, no rate limits; the default 15-minute interval
   keeps the load to roughly 96 requests per user per day.
+- **seeip.org** — free and open source, with no request limit stated. It is also
+  served over HTTP/1.1, which is what lets the extension drop its connection
+  between checks.
+- **ip-api.com** — free for non-commercial use, which this extension is: no
+  payment, no ads, nothing sold. 45 requests per minute; https is a paid
+  feature, so the free endpoint is http, and that is also what keeps it on
+  HTTP/1.1. The query asks for `status`, `message`, `countryCode` and `query`
+  rather than a full profile. Some ranges fall back to GeoLite2 data created by
+  MaxMind, available from https://www.maxmind.com.
 - **myip.com** — free with no request limit; the author asks for credit, which
   this section provides.
 

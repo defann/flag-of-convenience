@@ -4,7 +4,7 @@
 //   node tools/test.mjs
 
 import { parseIPv4, expandIPv6, classify, isIPv4, isIPv6, isPublicIp, canonicalize } from '../lib/ip.js';
-import { normalize, probeSource, probeAll, SOURCES } from '../lib/sources.js';
+import { normalize, probeSource, probeAll, dropConnections, SOURCES } from '../lib/sources.js';
 import { consensus } from '../lib/consensus.js';
 import { flagEmoji, countryName, ccColor } from '../lib/flags.js';
 
@@ -124,12 +124,17 @@ const SAMPLES = {
   'country.is': { ip: '109.204.88.1', country: 'BG' },
   'geojs.io': { country: 'BG', country_3: 'BGR', ip: '109.204.88.1', name: 'Bulgaria' },
   'myip.com': { ip: '109.204.88.1', country: 'Bulgaria', cc: 'BG' },
+  'seeip.org': { ip: '109.204.88.1', country: 'Bulgaria', country_code: 'BG', country_code3: 'BGR' },
+  'ip-api.com': { status: 'success', countryCode: 'BG', query: '109.204.88.1' },
 };
 eq(SOURCES.length, Object.keys(SAMPLES).length, 'every source has a sample response');
 for (const source of SOURCES) {
   const r = normalize(source.parse(SAMPLES[source.id]));
   ok(r?.ip === '109.204.88.1' && r?.cc === 'BG', `${source.id} parses its response`);
-  ok(source.url.startsWith('https://'), `${source.id} is queried over https`);
+  ok(source.url.startsWith(source.insecure ? 'http://' : 'https://'),
+    `${source.id} is queried over ${source.insecure ? 'http' : 'https'}`);
+  ok(!source.insecure || source.http1,
+    `${source.id} is only allowed in the clear because that pins it to HTTP/1.1`);
 }
 
 // probeSource never throws and reports failures as data.
@@ -161,6 +166,46 @@ eq((await probeSource(SOURCES[0], async () => {
   throw Object.assign(new Error('t'), { name: 'TimeoutError' });
 })).error, 'timed out', 'timeout gets a readable label');
 
+// Answers from an HTTP/1.1 source are marked fresh, because its socket is the
+// one dropConnections() closes after every check.
+const http1 = SOURCES.filter((s) => s.http1);
+ok(http1.length >= 1, 'at least one source is kept on HTTP/1.1');
+ok((await probeSource(http1[0], async () => SAMPLES[http1[0].id])).fresh, 'HTTP/1.1 answers are marked fresh');
+ok(!(await probeSource(SOURCES[0], async () => SAMPLES[SOURCES[0].id])).fresh, 'HTTP/2 answers are not marked fresh');
+ok((await probeSource(http1[0], async () => { throw new Error('x'); })).fresh, 'the mark survives a failed probe');
+
+const insecureSource = SOURCES.find((s) => s.insecure);
+ok(insecureSource, 'one source is reached in the clear, which is what keeps it on HTTP/1.1');
+eq((await probeSource(insecureSource, async () => SAMPLES[insecureSource.id])).secure, false,
+  'a reading fetched in the clear is marked insecure');
+eq((await probeSource(SOURCES[0], async () => SAMPLES[SOURCES[0].id])).secure, true,
+  'an https reading is marked secure');
+
+// dropConnections aborts one request per HTTP/1.1 source. The abort is the
+// point: an unfinished exchange is what makes Chrome close the pooled socket
+// instead of answering the next check over a connection that predates a
+// network change.
+const dropped = [];
+await dropConnections((url, opts) => {
+  dropped.push({ url, signal: opts.signal, whenCalled: opts.signal.aborted });
+  return new Promise((_, reject) => {
+    opts.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+});
+eq(dropped.map((d) => d.url).join(','), http1.map((s) => s.url).join(','),
+  'dropConnections only touches the HTTP/1.1 sources');
+ok(dropped.every((d) => !d.whenCalled && d.signal.aborted), 'dropConnections aborts what it starts');
+ok(dropped.every((d) => d.signal instanceof AbortSignal), 'dropConnections passes a real signal');
+for (const failing of [() => { throw new Error('no network'); }, () => Promise.reject(new Error('nope'))]) {
+  let threw = false;
+  try {
+    await dropConnections(failing);
+  } catch {
+    threw = true;
+  }
+  ok(!threw, 'dropConnections never throws when the request fails');
+}
+
 // probeAll keeps source order regardless of which resolves first.
 const ordered = await probeAll(async (url) => {
   const index = SOURCES.findIndex((s) => s.url === url);
@@ -168,6 +213,19 @@ const ordered = await probeAll(async (url) => {
   return { ip: `1.1.1.${index + 1}`, country: 'AU', cc: 'AU' };
 });
 eq(ordered.map((r) => r.id).join(','), SOURCES.map((s) => s.id).join(','), 'probeAll preserves order');
+
+// A source left out of a round is reported as skipped, not dropped: the vote
+// ignores it (no address), while the popup can still list every source.
+const partial = await probeAll(
+  async (url) => SAMPLES[SOURCES.find((s) => s.url === url).id],
+  (s) => s.http1,
+);
+eq(partial.length, SOURCES.length, 'a partial round still reports every source');
+eq(partial.filter((r) => r.skipped).map((r) => r.id).join(','),
+  SOURCES.filter((s) => !s.http1).map((s) => s.id).join(','), 'only the slow sources are skipped');
+ok(partial.filter((r) => r.skipped).every((r) => r.ip === null && r.error === 'not checked'),
+  'a skipped source carries no reading');
+ok(consensus(partial).responded === http1.length, 'skipped sources do not vote');
 
 // ---------- consensus ----------
 const v = (...rows) => consensus(rows.map(([id, ip, cc]) => ({ id, ip, cc })));
@@ -227,6 +285,68 @@ eq(r.probed, 2, 'failed verdict still reports how many were probed');
 // The reported address comes from a source that agrees with the winner.
 r = v(['a', '9.9.9.9', 'GB'], ['b', '1.1.1.1', 'BG'], ['c', '1.1.1.1', 'BG']);
 eq(r.ip, '1.1.1.1', 'address follows the winning country');
+
+// ---------- stale sockets ----------
+// The fresh source is reached over a connection opened for this very check.
+// When every other source reports a different address AND a different country,
+// they are answering down sockets that outlived a network change - Chrome keeps
+// them alive, so they still leave through the route used before the switch.
+const vf = (...rows) => consensus(rows.map(([id, ip, cc, fresh, secure = true]) => (
+  { id, ip, cc, fresh: Boolean(fresh), secure }
+)));
+
+r = vf(['a', '1.1.1.1', 'RU'], ['b', '1.1.1.1', 'RU'], ['f', '2.2.2.2', 'FI', true]);
+ok(r.cc === 'FI' && r.staleSockets, 'the fresh reading outranks a majority on stale sockets');
+eq(r.ip, '2.2.2.2', 'the fresh reading brings its own address');
+ok(r.strong, 'a stale-socket verdict is accepted at once, not held back');
+
+// One address, several countries: the geo databases disagree, nothing is stale.
+r = vf(['a', '1.1.1.1', 'GB'], ['f', '1.1.1.1', 'BG', true]);
+ok(!r.staleSockets && r.cc === 'GB', 'one shared address is a database difference');
+
+// Several addresses, one country: a rotating exit pool, nothing is stale.
+r = vf(['a', '1.1.1.1', 'FI'], ['f', '2.2.2.2', 'FI', true]);
+ok(!r.staleSockets && r.cc === 'FI', 'a rotating pool is not a stale socket');
+
+// One of the others shares the fresh address, so they are on the current route.
+r = vf(['a', '2.2.2.2', 'RU'], ['b', '1.1.1.1', 'RU'], ['f', '2.2.2.2', 'FI', true]);
+ok(!r.staleSockets && r.cc === 'RU', 'stale detection needs every other source to differ');
+
+// Nothing to compare against: a lone fresh reading stays as weak as any other.
+r = vf(['f', '1.1.1.1', 'FI', true], ['b', null, null]);
+ok(!r.staleSockets && !r.strong && r.unanimous, 'a lone fresh reading stays weak');
+
+// The fresh source is down: the rest decide exactly as they did before.
+r = vf(['a', '1.1.1.1', 'RU'], ['b', '1.1.1.1', 'RU'], ['f', null, null, true]);
+ok(!r.staleSockets && r.cc === 'RU' && r.strong, 'an unreachable fresh source changes nothing');
+
+// A source without a country cannot be the fresh witness either.
+r = vf(['a', '1.1.1.1', 'RU'], ['f', '2.2.2.2', null, true]);
+ok(!r.staleSockets && r.cc === 'RU', 'a fresh source without a country decides nothing');
+
+// Several fresh sources have to agree with each other before they can overrule
+// the rest; two of them make the reading strong on their own.
+r = vf(['a', '1.1.1.1', 'RU'], ['b', '1.1.1.1', 'RU'], ['f', '2.2.2.2', 'FI', true], ['g', '2.2.2.2', 'FI', true, false]);
+ok(r.cc === 'FI' && r.staleSockets && r.strong, 'agreeing fresh sources overrule stale sockets');
+
+r = vf(['a', '1.1.1.1', 'RU'], ['f', '2.2.2.2', 'FI', true], ['g', '3.3.3.3', 'DE', true]);
+ok(!r.staleSockets, 'fresh sources that contradict each other prove nothing');
+
+// An answer fetched in the clear can be rewritten in transit, so on its own it
+// never moves the country - it needs an https witness alongside it.
+r = vf(['a', '1.1.1.1', 'RU'], ['b', '1.1.1.1', 'RU'], ['g', '2.2.2.2', 'FI', true, false]);
+ok(!r.staleSockets && r.cc === 'RU', 'a lone insecure reading cannot overrule the rest');
+
+r = vf(['a', '1.1.1.1', 'RU'], ['b', '1.1.1.1', 'RU'], ['f', '2.2.2.2', 'FI', true],
+  ['g', '2.2.2.2', 'FI', true, false]);
+ok(r.staleSockets, 'an https witness carries the insecure one');
+
+// A stale source that happens to share an address with the fresh ones is on the
+// current route after all, so nothing is stale.
+r = vf(['a', '2.2.2.2', 'RU'], ['f', '2.2.2.2', 'FI', true], ['g', '3.3.3.3', 'FI', true]);
+ok(!r.staleSockets, 'a shared address means the others are on the current route');
+
+eq(consensus([]).staleSockets, false, 'a failed verdict reports no stale sockets');
 
 // Malformed entries are ignored rather than crashing the vote.
 ok(consensus([null, undefined, { id: 'a', ip: '1.1.1.1', cc: 'NL' }]).cc === 'NL', 'consensus skips empty rows');
