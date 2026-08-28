@@ -222,6 +222,10 @@ function render() {
   renderIps(state);
   renderSources(state);
   renderHistory(history);
+
+  // A notification that never left Chrome is reported here rather than nowhere:
+  // silence is indistinguishable from "the country simply has not changed".
+  if (settings?.notify && state.notifyError) showNote(state.notifyError);
   $('checked-at').textContent = state.checkedAt ? `Checked ${fmtAgo(state.checkedAt)}` : 'Not checked yet';
 }
 
@@ -271,31 +275,64 @@ $('interval').addEventListener('change', () => {
   send({ type: 'setSettings', settings: { intervalMin } });
 });
 
+function showNote(text) {
+  const note = $('notify-note');
+  note.textContent = text;
+  note.classList.remove('hidden');
+}
+
 // Notifications are an optional permission, so enabling the checkbox has to ask
 // for it. The click itself is the user gesture Chrome requires.
+//
+// Chrome closes the popup the instant that prompt opens, so this handler cannot
+// count on surviving its own await: the background watches for the granted
+// permission and saves the setting there. What stays here is what only a live
+// popup can do - report a refusal, and send a test notification in the case
+// where the permission was already held, no prompt appeared and the background
+// therefore has nothing to announce.
 $('notify').addEventListener('click', async (event) => {
   const box = $('notify');
-  const note = $('notify-note');
-  note.classList.add('hidden');
+  $('notify-note').classList.add('hidden');
 
-  if (box.checked) {
-    event.preventDefault(); // decided once the permission answer is known
-    let granted = false;
+  if (!box.checked) {
+    current.settings = { ...current.settings, notify: false };
+    send({ type: 'setSettings', settings: { notify: false } });
+    return;
+  }
+
+  event.preventDefault(); // decided once the permission answer is known
+  // Synchronous on purpose: chrome.notifications only exists while the optional
+  // permission is granted, and asking permissions.contains() instead would put
+  // an await in front of the request below, where it can outlive the user
+  // gesture Chrome insists on.
+  const held = Boolean(chrome.notifications);
+
+  let granted = held;
+  if (!held) {
     try {
       granted = await chrome.permissions.request({ permissions: ['notifications'] });
     } catch {
       granted = false;
     }
-    box.checked = granted;
-    if (!granted) {
-      note.textContent = 'Chrome denied notification access, so this stays off.';
-      note.classList.remove('hidden');
-    }
   }
 
-  const notify = box.checked;
-  current.settings = { ...current.settings, notify };
-  send({ type: 'setSettings', settings: { notify } });
+  box.checked = granted;
+  if (!granted) {
+    showNote('Chrome denied notification access, so this stays off.');
+    return;
+  }
+
+  current.settings = { ...current.settings, notify: true };
+  send({ type: 'setSettings', settings: { notify: true } });
+  if (!held) return; // the background posts the confirmation for a fresh grant
+
+  const res = await send({ type: 'testNotify' });
+  if (!res || res.failure) {
+    showNote('The extension background is not responding, so no test notification was sent.');
+  } else {
+    showNote(res.notifyFailure
+      ?? 'Sent a test notification. If no banner appeared, notifications from Chrome are switched off in your system settings.');
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -327,9 +364,7 @@ async function syncNotifyPermission() {
   }
   current.settings = { ...current.settings, notify: false };
   $('notify').checked = false;
-  const note = $('notify-note');
-  note.textContent = 'Notification access was revoked, so this is off.';
-  note.classList.remove('hidden');
+  showNote('Notification access is not granted, so this is off.');
   send({ type: 'setSettings', settings: { notify: false } });
 }
 

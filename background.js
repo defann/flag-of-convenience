@@ -153,6 +153,10 @@ async function doCheck(reason) {
     pendingCc,
     fullCheckAt: full ? Date.now() : prev?.fullCheckAt ?? 0,
     retryStep: 0,
+    // Why the last country change went unannounced, if it did. Carried across
+    // checks: a reason cleared by the next check a minute later is a reason the
+    // user never got to read.
+    notifyError: prev?.notifyError ?? null,
     checkedAt: Date.now(),
     error: null,
     errorAt: null,
@@ -164,7 +168,7 @@ async function doCheck(reason) {
     // is about, and IP addresses have no business sitting on disk for days.
     history.unshift({ at: Date.now(), from: changedFrom, to: verdict.cc });
     history.length = Math.min(history.length, HISTORY_LIMIT);
-    await notifyChange(changedFrom, verdict.cc, verdict.ip);
+    state.notifyError = await notifyChange(changedFrom, verdict.cc, verdict.ip);
   }
 
   await chrome.storage.local.set({ state, history });
@@ -172,22 +176,96 @@ async function doCheck(reason) {
   return state;
 }
 
+// ---------- Notifications ----------
+
+// What the confirmation notification says. It is posted the moment the
+// permission is granted, so the very first thing the setting does is prove
+// that a banner actually reaches the screen.
+const NOTIFY_ON_TITLE = 'Notifications are on';
+const NOTIFY_ON_BODY = 'This is what a change of exit country will look like.';
+
+// Every notification gets its own id. A reused id makes Chrome replace the
+// earlier notification rather than post a new one, and a replacement arrives
+// without a banner while the first one is still in the notification centre -
+// which is a country change announced to nobody.
+let notificationSeq = 0;
+
+// Promisified by hand rather than awaiting the promise-returning form:
+// notifications.create only began returning promises in Chrome 116, below the
+// minimum this extension supports, and the callback form is the only one that
+// surfaces runtime.lastError - which is exactly where "the notification went
+// nowhere" shows up.
+function createNotification(options) {
+  return new Promise((resolve, reject) => {
+    const id = `foc-${Date.now()}-${notificationSeq++}`;
+    chrome.notifications.create(id, options, () => {
+      const err = chrome.runtime.lastError;
+      if (err) reject(new Error(err.message));
+      else resolve(id);
+    });
+  });
+}
+
+/**
+ * Posts one notification. Returns null on success, or a short sentence saying
+ * why it could not be posted: a notification that quietly goes nowhere is the
+ * one failure this feature must not have, so the popup is told about it.
+ */
+async function postNotification(title, message) {
+  // The namespace exists only while the optional permission is granted, and a
+  // worker that was already running when it was granted keeps the bindings it
+  // started with - nothing short of a reload brings the namespace back.
+  if (!chrome.notifications) {
+    return 'Chrome has not handed the extension its notification API yet. Reload the extension in chrome://extensions.';
+  }
+  try {
+    // The permission can be revoked from chrome://extensions behind our back.
+    if (!(await chrome.permissions.contains({ permissions: ['notifications'] }))) {
+      return 'Notification access is not granted.';
+    }
+    await createNotification({
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title,
+      message,
+    });
+    return null;
+  } catch (err) {
+    return `Chrome refused the notification: ${String(err?.message ?? err)}`;
+  }
+}
+
+/**
+ * Records why a notification did not arrive, so the popup can say so under the
+ * checkbox. Used by the paths outside a check; a check writes the field itself,
+ * since its own state write would overwrite anything set here.
+ */
+async function recordNotifyResult(failure) {
+  try {
+    const { state } = await chrome.storage.local.get('state');
+    if (!state || (state.notifyError ?? null) === (failure ?? null)) return;
+    await chrome.storage.local.set({ state: { ...state, notifyError: failure ?? null } });
+  } catch {
+    // Reporting the failure must not become a second failure.
+  }
+}
+
+/** Announces a country change. Returns null, or why the notification failed. */
 async function notifyChange(from, to, ip) {
   try {
     const { notify } = await getSettings();
-    if (!notify || !chrome.notifications) return;
-    // The permission is optional and can be revoked in chrome://extensions.
-    const granted = await chrome.permissions.contains({ permissions: ['notifications'] });
-    if (!granted) return;
+    if (!notify) return null;
     const mark = supportsFlagEmoji() ? flagEmoji : () => '';
-    await chrome.notifications.create('country-change', {
-      type: 'basic',
-      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
-      title: 'Exit country changed',
-      message: `${mark(from)} ${countryName(from)} → ${mark(to)} ${countryName(to)}\nIP: ${ip}`.trim(),
-    });
-  } catch {
+    const failure = await postNotification(
+      'Exit country changed',
+      `${mark(from)} ${countryName(from)} → ${mark(to)} ${countryName(to)}\nIP: ${ip}`.trim(),
+    );
+    if (failure) console.warn('Flag of Convenience: notification not delivered -', failure);
+    return failure;
+  } catch (err) {
     // A notification failing must never break the check itself.
+    console.warn('Flag of Convenience: notification not delivered -', err);
+    return null;
   }
 }
 
@@ -261,9 +339,38 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   else if (alarm.name === RETRY_ALARM) checkInBackground('retry');
 });
 
+// Chrome closes the popup the instant the permission prompt opens, so the click
+// that asked for notifications is killed mid-await and never gets to save the
+// setting - which is how the box could come back unticked after the user had
+// just allowed it. The answer arrives here instead, in a context that outlives
+// the prompt, and this is where the setting follows it. Granting the permission
+// from chrome://extensions turns the setting on the same way; revoking it there
+// turns it off.
+chrome.permissions.onAdded.addListener((perms) => {
+  if (!perms?.permissions?.includes('notifications')) return;
+  (async () => {
+    await updateSettings({ notify: true });
+    // Doubles as proof the channel works end to end: if this banner never
+    // shows up, notifications are being dropped outside Chrome's reach - a
+    // macOS Focus mode, or Chrome itself lacking system notification access.
+    const failure = await postNotification(NOTIFY_ON_TITLE, NOTIFY_ON_BODY);
+    if (failure) console.warn('Flag of Convenience: notification not delivered -', failure);
+    await recordNotifyResult(failure);
+  })().catch(() => {});
+});
+
+chrome.permissions.onRemoved.addListener((perms) => {
+  if (!perms?.permissions?.includes('notifications')) return;
+  updateSettings({ notify: false }).catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
+      // Only ever set by a test notification: the popup shows the reason there
+      // and then, instead of leaving the user to find out at the next country
+      // change that nothing arrives.
+      let notifyFailure = null;
       if (msg?.type === 'refresh') {
         await checkNow('manual');
       } else if (msg?.type === 'setSettings') {
@@ -271,6 +378,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await ensureAlarm();
       } else if (msg?.type === 'clearHistory') {
         await chrome.storage.local.set({ history: [] });
+      } else if (msg?.type === 'testNotify') {
+        notifyFailure = await postNotification(NOTIFY_ON_TITLE, NOTIFY_ON_BODY);
+        await recordNotifyResult(notifyFailure);
       } else if (msg?.type === 'getState') {
         const { state } = await chrome.storage.local.get('state');
         const { intervalMin } = await getSettings();
@@ -285,6 +395,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         state: data.state ?? null,
         history: data.history ?? [],
         settings: await getSettings(),
+        notifyFailure,
       });
     } catch (err) {
       sendResponse({ failure: String(err?.message ?? err) });

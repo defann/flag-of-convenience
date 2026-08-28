@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Flag of Convenience",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Shows the flag of the country your traffic appears to come from, an at-a-glance VPN and proxy check in your toolbar.",
   "minimum_chrome_version": "111",
   "permissions": ["alarms", "storage"],
