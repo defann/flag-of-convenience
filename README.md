@@ -6,7 +6,8 @@ same thing to your traffic — this extension shows you which flag that is.
 A Manifest V3 Chrome extension that shows the flag of the country **your own
 traffic appears to come from** — the country websites see you as. Handy for
 keeping an eye on a VPN or proxy: when the flag changes, your exit country
-changed; when the notification fires, the tunnel probably dropped.
+changed; when a red dot appears on it, that happened while you were not
+looking, and the tunnel probably dropped.
 
 ## Features
 
@@ -15,7 +16,9 @@ changed; when the notification fires, the tunnel probably dropped.
   not render flag emoji).
 - Popup with every exit address seen in the current check, what each source
   reported, how many of them agreed, and click-to-copy on each address.
-- An optional notification when the exit country changes.
+- A red dot in the corner of the icon when the exit country changes. It stays
+  until the popup is opened, and the icon's tooltip says which country it was
+  before. No notification permission, no system banner to go missing.
 - History of the last 20 country changes, clearable from the popup.
 - A `≠` badge when sources see **different countries on different addresses**,
   which suggests part of the traffic is leaving outside the tunnel. Sources
@@ -28,7 +31,7 @@ changed; when the notification fires, the tunnel probably dropped.
 
 ## How it works
 
-Every check queries five independent services in parallel, each returning the
+Every check queries six independent services in parallel, each returning the
 exit IP and its country in one response:
 
 | Source | Endpoint | |
@@ -38,6 +41,7 @@ exit IP and its country in one response:
 | seeip.org | `https://api.seeip.org/geoip` | HTTP/1.1, connection dropped after every check |
 | ip-api.com | `http://ip-api.com/json/?fields=status,message,countryCode,query` | HTTP/1.1, connection dropped after every check |
 | myip.com | `https://api.myip.com/` | |
+| checkip.now | `https://api.checkip.now/` | HTTP/1.1, connection dropped after every check |
 
 The country is decided by majority vote, which matters for two reasons found in
 practice:
@@ -65,19 +69,22 @@ the wrong answer is genuinely fetched, over the wrong route.
 The only lever an extension has over the socket pool is an aborted request: an
 unfinished exchange leaves the connection unusable, so Chrome closes it and the
 next check has to dial out again. That works on HTTP/1.1 only — over HTTP/2 an
-abort resets a single stream and leaves the session open — so two sources are
+abort resets a single stream and leaves the session open — so three sources are
 deliberately kept on servers that speak HTTP/1.1, and their sockets are dropped
-after every check. `seeip.org` speaks it over https; `ip-api.com` offers nothing
-but plain http on its free tier, which is exactly what pins it to HTTP/1.1.
+after every check. `seeip.org` and `checkip.now` speak it over https;
+`ip-api.com` offers nothing but plain http on its free tier, which is exactly
+what pins it to HTTP/1.1.
 
 The other three cannot be closed that way, so instead they are left alone: a
 full round is run at most once every five minutes, whatever the check interval,
-and the checks in between rest on the HTTP/1.1 pair. A connection only closes
+and the checks in between rest on the HTTP/1.1 trio. A connection only closes
 while nothing is asking it anything, so the pause is what keeps those sources
 from being stuck on one socket forever when checks run every minute.
 
-Those two are therefore the only ones certain to have answered over the current
-route. When they agree with each other, and every remaining source reports both
+Those three are therefore the only ones certain to have answered over the
+current route. Two of them agreeing is already a majority of a partial round, so
+a country change between full rounds no longer has to wait for one. When they
+all agree with each other, and every remaining source reports both
 a different address *and* a different country, the others are answering over
 sockets that outlived a network change: their majority is a majority about the
 past, and it is overruled at once instead of waiting for agreement that would
@@ -93,10 +100,11 @@ have arrived over https before the rest are declared stale.
 
 - **No host permissions at all.** Every endpoint answers with
   `Access-Control-Allow-Origin: *`, so plain CORS is enough and the extension
-  asks for no site access. Install-time permissions are `alarms` and `storage`;
-  `notifications` is optional and requested only when you tick the box. The
-  new-tab check listens to `chrome.tabs.onCreated`, which needs no permission
-  and, without `tabs`, carries no url, title or favicon of that tab.
+  asks for no site access. The only permissions are `alarms` and `storage`;
+  there are no optional ones either, since a change of country is shown on the
+  icon itself rather than through a notification. The new-tab check listens to
+  `chrome.tabs.onCreated`, which needs no permission and, without `tabs`,
+  carries no url, title or favicon of that tab.
 - No telemetry, no server of the developer's, no account.
 - Country-change history stores countries and timestamps, never IP addresses.
 - Response text from a service never reaches the UI: failures are reported with
@@ -154,11 +162,11 @@ at its root and contains no tests, tooling, or listing assets.
 
 ```
 manifest.json        Manifest V3, minimal permissions
-background.js        service worker: polling, icon, notifications
+background.js        service worker: polling, icon, the change mark
 lib/ip.js            IPv4/IPv6 parsing, classification, canonical form
 lib/sources.js       endpoint definitions, response parsing and validation
 lib/consensus.js     majority vote over the source answers
-lib/flags.js         flag emoji, country names, toolbar icon rendering
+lib/flags.js         flag emoji, country names, toolbar icon and its dot
 popup/               popup UI
 store/               Chrome Web Store listing assets (not shipped in the zip)
 tools/test.mjs       unit tests
@@ -184,6 +192,10 @@ tools/pack.mjs       upload package builder
   MaxMind, available from https://www.maxmind.com.
 - **myip.com** — free with no request limit; the author asks for credit, which
   this section provides.
+- **checkip.now** — free JSON endpoint of the checkip.now diagnostics page, with
+  no limits or terms published. Answers over https with the same `ip` and `cc`
+  fields as myip.com, and over HTTP/1.1, which is what lets the extension drop
+  its connection between checks.
 
 ## License
 

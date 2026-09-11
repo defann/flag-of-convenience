@@ -17,16 +17,16 @@ attached to the GitHub release).
 
 ## 1. Package
 
-Upload `dist/flag-of-convenience-2.1.0.zip` under **Items → Add new item**.
+Upload `dist/flag-of-convenience-2.3.0.zip` under **Items → Add new item**.
 
 Facts a reviewer will check, and where they come from:
 
 | Field | Value |
 | --- | --- |
 | Manifest version | 3 |
-| Version | 2.1.0 |
+| Version | 2.3.0 |
 | Permissions | `alarms`, `storage` |
-| Optional permissions | `notifications` |
+| Optional permissions | none |
 | Host permissions | none |
 | Content scripts | none |
 | Remote code | none |
@@ -51,27 +51,27 @@ Shows the flag of the country your traffic appears to come from, an at-a-glance 
 ```
 A ship registered abroad sails under a flag of convenience. A VPN does the same thing to your traffic — Flag of Convenience shows you which flag that is.
 
-The country your traffic appears to come from sits in your toolbar as its flag. One glance tells you whether the tunnel is up and where it comes out, and an optional notification fires the moment that country changes — which is usually the moment a VPN dropped.
+The country your traffic appears to come from sits in your toolbar as its flag. One glance tells you whether the tunnel is up and where it comes out, and a red dot appears on the flag the moment that country changes — which is usually the moment a VPN dropped.
 
 WHAT YOU GET
 
 • The exit country's flag as the toolbar icon, drawn edge to edge so it stays readable at 16 px. On Windows, where Chrome does not render flag emoji, a coloured country-code badge is used instead.
 • A popup with every exit address seen in the current check, what each source reported, and how many of them agreed. Click an address to copy it.
-• An optional notification when the exit country changes.
+• A red dot on the icon when the exit country changes, until you open the popup. The tooltip tells you which country it was before.
 • A history of the last 20 country changes, clearable at any time.
 • A ≠ badge when the sources see different countries on different addresses — a hint that part of your traffic is leaving outside the tunnel.
 • Checks every 1, 5, 15 or 60 minutes, at browser start, and when you open a new tab (at most one check every 30 seconds).
 
 HOW THE COUNTRY IS DECIDED
 
-Each check asks five independent public services in parallel — country.is, GeoJS, seeip.org, ip-api.com and myip.com — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
+Each check asks six independent public services in parallel — country.is, GeoJS, seeip.org, ip-api.com, myip.com and checkip.now — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
 
 PRIVACY
 
 • No host permissions at all. The extension cannot read, modify or observe any page you visit — it has no access to your tabs' content, your history, your bookmarks or your form data, and it has no content scripts.
 • No telemetry, no developer server, no account, no identifier. Nothing leaves your device for the developer, ever.
-• Everything is stored in local extension storage: two settings, the current reading, and a capped list of country changes that holds countries and timestamps but never IP addresses.
-• Notifications are an optional permission, requested only if you tick the box.
+• Everything is stored in local extension storage: one setting, the current reading, and a capped list of country changes that holds countries and timestamps but never IP addresses.
+• No optional permissions: a change of country is shown on the icon itself, so notification access is never requested.
 
 Open source, MIT licensed: https://github.com/defann/flag-of-convenience
 ```
@@ -111,16 +111,11 @@ The exit country is re-checked on a schedule the user chooses (1, 5, 15 or 60 mi
 `storage`
 
 ```
-Stores, on the device only: the user's two settings (check interval and the notification toggle), the latest reading that the popup and the toolbar icon are drawn from, and a capped list of the last 20 country changes containing timestamps and country codes. Nothing is transmitted anywhere.
+Stores, on the device only: the user's check interval, the latest reading that the popup and the toolbar icon are drawn from, when the popup was last opened after a country change (which clears the red dot on the icon), and a capped list of the last 20 country changes containing timestamps and country codes. Nothing is transmitted anywhere.
 ```
 
-`notifications` (optional)
-
-```
-Used only to tell the user that their exit country has changed, which is the signal that a VPN tunnel dropped. It is an optional permission that is requested at the moment the user ticks the checkbox in the popup, and it is never requested otherwise.
-```
-
-Host permissions: none requested — say so if a field asks.
+Host permissions: none requested — say so if a field asks. Optional
+permissions: none either.
 
 **Remote code**: No, I am not using remote code. The extension executes no code
 it did not ship with; it only fetches JSON data over HTTPS.
@@ -129,7 +124,7 @@ it did not ship with; it only fetches JSON data over HTTPS.
 certify the three statements (data is not sold, not used for purposes unrelated
 to the single purpose, not used to determine creditworthiness or for lending).
 
-The three public services necessarily observe the requesting IP address in order
+The six public services necessarily observe the requesting IP address in order
 to answer — any HTTP request reveals it — but that is the service answering the
 user's own request, not the developer collecting anything. This is spelled out
 in the privacy policy.

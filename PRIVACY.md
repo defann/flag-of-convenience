@@ -1,6 +1,6 @@
 # Privacy Policy — Flag of Convenience
 
-_Last updated: 22 August 2026_
+_Last updated: 9 September 2026_
 
 ## What this extension does
 
@@ -17,13 +17,15 @@ you press Refresh, and when you open a new tab (at most once every 30 seconds).
    necessarily reveals the requesting IP address, those services observe your IP
    address in the ordinary course of answering. The extension sends them nothing
    else.
-2. **Your two settings** — check interval and the notification toggle.
+2. **Your one setting** — the check interval.
 3. **A capped list of the last 20 country changes** — timestamp, previous
    country, new country. IP addresses are deliberately not stored in this list.
 
 ## Where the data goes
 
-All of the above is stored only in `chrome.storage.local`, on your own device.
+All of the above, plus the moment you last opened the popup after a country
+change (which is what clears the red dot on the icon), is stored only in
+`chrome.storage.local`, on your own device.
 None of it is transmitted to the developer or to any analytics, advertising, or
 telemetry service. The developer operates no server and receives no data from
 this extension. There is no account, no identifier, and no tracking.
@@ -37,6 +39,7 @@ Each check contacts these endpoints:
 - `https://api.seeip.org/geoip` — seeip.org
 - `http://ip-api.com/json/?fields=status,message,countryCode,query` — ip-api.com
 - `https://api.myip.com/` — myip.com
+- `https://api.checkip.now/` — checkip.now
 
 Requests are GET only, are sent with `credentials: 'omit'`, and carry no
 cookies, no page content, and no browsing history. Each service's own privacy

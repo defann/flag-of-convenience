@@ -5,7 +5,9 @@ const $ = (id) => document.getElementById(id);
 // Windows Chrome does not draw flag emoji, so fall back to country codes there.
 const FLAGS_OK = supportsFlagEmoji();
 const flag = (cc) => (FLAGS_OK ? flagEmoji(cc) : '');
-const withFlag = (cc) => `${flag(cc)} ${cc}`.trim();
+// Joined with a no-break space, so a flag never ends up on a line without its
+// code. trim() strips it again when there is no flag to join.
+const withFlag = (cc) => `${flag(cc)}\u00a0${cc}`.trim();
 
 let current = { state: null, history: [], settings: null };
 
@@ -38,6 +40,14 @@ function fmtAgo(ts) {
   const hr = Math.round(min / 60);
   if (hr < 24) return `${hr} hr ago`;
   return `on ${fmtTime(ts)}`;
+}
+
+// Time left before the resting sources are asked again, as m:ss. It sits at
+// 0:00 once the wait is over, until the next check picks them up.
+function fmtCooldown(until) {
+  if (!until) return '';
+  const sec = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 }
 
 let toastTimer = null;
@@ -117,13 +127,26 @@ function renderSources(state) {
     const val = document.createElement('span');
     val.className = 's-val';
     if (s.ip) {
-      val.textContent = s.cc ? `${s.ip} · ${withFlag(s.cc)}` : s.ip;
+      val.textContent = s.cc ? `${s.ip}\u00a0·\u00a0${withFlag(s.cc)}` : s.ip;
     } else if (s.skipped) {
       // Left alone on purpose: its connection can only close while nothing is
       // asking it anything, and a connection that never closes keeps answering
-      // over the route that was current when it was opened.
-      val.classList.add('skipped');
-      val.textContent = 'resting — asked every 5 min';
+      // over the route that was current when it was opened. Until it is asked
+      // again, what it said last time stands next to the countdown.
+      const last = s.last;
+      if (last?.ip) {
+        // Only the space before the countdown is breakable: a reading that no
+        // longer fits beside it moves down as a whole.
+        val.textContent = last.cc ? `${last.ip}\u00a0·\u00a0${withFlag(last.cc)}` : last.ip;
+      } else {
+        val.classList.add('failed');
+        val.textContent = last?.error ? `unavailable (${last.error})` : 'not checked yet';
+      }
+      const cooldown = document.createElement('span');
+      cooldown.className = 's-cooldown';
+      cooldown.dataset.until = String(state.nextFullCheckAt ?? 0);
+      cooldown.textContent = ` ${fmtCooldown(state.nextFullCheckAt)}`;
+      val.append(cooldown);
     } else {
       val.classList.add('failed');
       val.textContent = `unavailable (${s.error ?? 'error'})`;
@@ -161,7 +184,6 @@ function renderSettings(settings) {
   const select = $('interval');
   select.value = String(settings.intervalMin);
   if (!select.value) select.value = String(15); // stored value no longer offered
-  $('notify').checked = !!settings.notify;
 }
 
 function render() {
@@ -222,10 +244,6 @@ function render() {
   renderIps(state);
   renderSources(state);
   renderHistory(history);
-
-  // A notification that never left Chrome is reported here rather than nowhere:
-  // silence is indistinguishable from "the country simply has not changed".
-  if (settings?.notify && state.notifyError) showNote(state.notifyError);
   $('checked-at').textContent = state.checkedAt ? `Checked ${fmtAgo(state.checkedAt)}` : 'Not checked yet';
 }
 
@@ -275,66 +293,6 @@ $('interval').addEventListener('change', () => {
   send({ type: 'setSettings', settings: { intervalMin } });
 });
 
-function showNote(text) {
-  const note = $('notify-note');
-  note.textContent = text;
-  note.classList.remove('hidden');
-}
-
-// Notifications are an optional permission, so enabling the checkbox has to ask
-// for it. The click itself is the user gesture Chrome requires.
-//
-// Chrome closes the popup the instant that prompt opens, so this handler cannot
-// count on surviving its own await: the background watches for the granted
-// permission and saves the setting there. What stays here is what only a live
-// popup can do - report a refusal, and send a test notification in the case
-// where the permission was already held, no prompt appeared and the background
-// therefore has nothing to announce.
-$('notify').addEventListener('click', async (event) => {
-  const box = $('notify');
-  $('notify-note').classList.add('hidden');
-
-  if (!box.checked) {
-    current.settings = { ...current.settings, notify: false };
-    send({ type: 'setSettings', settings: { notify: false } });
-    return;
-  }
-
-  event.preventDefault(); // decided once the permission answer is known
-  // Synchronous on purpose: chrome.notifications only exists while the optional
-  // permission is granted, and asking permissions.contains() instead would put
-  // an await in front of the request below, where it can outlive the user
-  // gesture Chrome insists on.
-  const held = Boolean(chrome.notifications);
-
-  let granted = held;
-  if (!held) {
-    try {
-      granted = await chrome.permissions.request({ permissions: ['notifications'] });
-    } catch {
-      granted = false;
-    }
-  }
-
-  box.checked = granted;
-  if (!granted) {
-    showNote('Chrome denied notification access, so this stays off.');
-    return;
-  }
-
-  current.settings = { ...current.settings, notify: true };
-  send({ type: 'setSettings', settings: { notify: true } });
-  if (!held) return; // the background posts the confirmation for a fresh grant
-
-  const res = await send({ type: 'testNotify' });
-  if (!res || res.failure) {
-    showNote('The extension background is not responding, so no test notification was sent.');
-  } else {
-    showNote(res.notifyFailure
-      ?? 'Sent a test notification. If no banner appeared, notifications from Chrome are switched off in your system settings.');
-  }
-});
-
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.state || changes.history) {
@@ -345,6 +303,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.settings) current.settings = { ...current.settings, ...changes.settings.newValue };
   render();
+
+  // A change of country that lands while the popup is open is being looked at
+  // right now, so the icon must not keep the dot for it until the next visit.
+  const before = changes.state?.oldValue?.lastChange?.at;
+  const after = changes.state?.newValue?.lastChange?.at;
+  if (after && after !== before) send({ type: 'changeSeen' });
 });
 
 setInterval(() => {
@@ -353,19 +317,12 @@ setInterval(() => {
   }
 }, 10_000);
 
-// The notification permission can be revoked from chrome://extensions behind
-// the extension's back, so the stored setting is reconciled with reality once.
-async function syncNotifyPermission() {
-  if (!current.settings?.notify) return;
-  try {
-    if (await chrome.permissions.contains({ permissions: ['notifications'] })) return;
-  } catch {
-    return;
+setInterval(() => {
+  for (const el of document.querySelectorAll('.s-cooldown')) {
+    el.textContent = ` ${fmtCooldown(Number(el.dataset.until))}`;
   }
-  current.settings = { ...current.settings, notify: false };
-  $('notify').checked = false;
-  showNote('Notification access is not granted, so this is off.');
-  send({ type: 'setSettings', settings: { notify: false } });
-}
+}, 1000);
 
-load({ type: 'getState' }).then(syncNotifyPermission);
+// Opening the popup is also what marks the latest country change as seen: the
+// background takes the dot off the icon when it answers this.
+load({ type: 'getState' });

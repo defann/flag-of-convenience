@@ -126,7 +126,9 @@ const SAMPLES = {
   'myip.com': { ip: '109.204.88.1', country: 'Bulgaria', cc: 'BG' },
   'seeip.org': { ip: '109.204.88.1', country: 'Bulgaria', country_code: 'BG', country_code3: 'BGR' },
   'ip-api.com': { status: 'success', countryCode: 'BG', query: '109.204.88.1' },
+  'checkip.now': { ip: '109.204.88.1', country: 'Bulgaria', cc: 'BG' },
 };
+eq(new Set(SOURCES.map((s) => s.id)).size, SOURCES.length, 'source ids are unique');
 eq(SOURCES.length, Object.keys(SAMPLES).length, 'every source has a sample response');
 for (const source of SOURCES) {
   const r = normalize(source.parse(SAMPLES[source.id]));
@@ -215,17 +217,28 @@ const ordered = await probeAll(async (url) => {
 eq(ordered.map((r) => r.id).join(','), SOURCES.map((s) => s.id).join(','), 'probeAll preserves order');
 
 // A source left out of a round is reported as skipped, not dropped: the vote
-// ignores it (no address), while the popup can still list every source.
-const partial = await probeAll(
-  async (url) => SAMPLES[SOURCES.find((s) => s.url === url).id],
-  (s) => s.http1,
-);
+// ignores it (no address), while the popup can still list every source along
+// with what it said in the last round it took part in.
+const bySample = async (url) => SAMPLES[SOURCES.find((s) => s.url === url).id];
+const fullRound = await probeAll(bySample);
+const partial = await probeAll(bySample, (s) => s.http1, fullRound);
 eq(partial.length, SOURCES.length, 'a partial round still reports every source');
 eq(partial.filter((r) => r.skipped).map((r) => r.id).join(','),
   SOURCES.filter((s) => !s.http1).map((s) => s.id).join(','), 'only the slow sources are skipped');
 ok(partial.filter((r) => r.skipped).every((r) => r.ip === null && r.error === 'not checked'),
-  'a skipped source carries no reading');
+  'a skipped source carries no reading of its own');
+ok(partial.filter((r) => r.skipped).every((r) => r.last?.ip === '109.204.88.1' && r.last?.cc === 'BG'),
+  'a skipped source remembers its last reading');
 ok(consensus(partial).responded === http1.length, 'skipped sources do not vote');
+const partialAgain = await probeAll(bySample, (s) => s.http1, partial);
+ok(partialAgain.filter((r) => r.skipped).every((r) => r.last?.ip === '109.204.88.1'),
+  'the last reading is carried across several partial rounds');
+const failedRound = await probeAll(async () => { throw Object.assign(new Error('t'), { name: 'TimeoutError' }); });
+const afterFailure = await probeAll(bySample, (s) => s.http1, failedRound);
+ok(afterFailure.filter((r) => r.skipped).every((r) => r.last?.ip === null && r.last?.error === 'timed out'),
+  'a skipped source remembers a failure too');
+ok((await probeAll(bySample, (s) => s.http1)).filter((r) => r.skipped).every((r) => r.last === null),
+  'nothing to remember without a previous round');
 
 // ---------- consensus ----------
 const v = (...rows) => consensus(rows.map(([id, ip, cc]) => ({ id, ip, cc })));

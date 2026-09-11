@@ -42,7 +42,7 @@ const SCENES = {
       { at: now - 5_400_000, from: 'NL', to: 'BG' },
       { at: now - 86_400_000, from: 'DE', to: 'NL' },
     ],
-    settings: { intervalMin: 15, notify: true },
+    settings: { intervalMin: 15 },
   },
   rotation: {
     state: {
@@ -57,7 +57,7 @@ const SCENES = {
       checkedAt: now - 8_000, error: null, errorAt: null,
     },
     history: [{ at: now - 1_800_000, from: 'DE', to: 'NL' }],
-    settings: { intervalMin: 15, notify: true },
+    settings: { intervalMin: 15 },
   },
   leak: {
     state: {
@@ -72,7 +72,7 @@ const SCENES = {
       checkedAt: now - 15_000, error: null, errorAt: null,
     },
     history: [],
-    settings: { intervalMin: 5, notify: true },
+    settings: { intervalMin: 5 },
   },
 };
 
@@ -181,7 +181,6 @@ const data = SCENES[scene];
 window.chrome = {
   runtime: { sendMessage: async () => data },
   storage: { onChanged: { addListener() {} } },
-  permissions: { request: async () => true, contains: async () => true },
 };`;
 }
 
