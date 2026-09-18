@@ -49,9 +49,10 @@ why). That request and its answer travel unencrypted, so anyone on the network
 path can see it was made, and can read or alter the reply. What it carries is
 your own IP address and a two-letter country code — an address every hop on the
 path can see anyway — and the extension treats an answer received in the clear
-as the weaker witness: it can never move the displayed country unless an https
-source agrees. If you would rather that request were not made at all, the source
-can be dropped from `lib/sources.js` in a local build.
+as the weaker witness: the country on the icon never changes on its word alone,
+only once an https source reports the same. If you would rather that request
+were not made at all, the source can be dropped from `lib/sources.js` in a local
+build.
 
 ## What this extension never does
 

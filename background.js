@@ -118,24 +118,28 @@ async function doCheck(reason) {
   // believes in: it drives the icon, survives failed checks, and only moves
   // when a reading is trustworthy. A reading backed by a majority is accepted
   // at once; one that nobody contradicted is accepted after a second check
-  // agrees; a genuinely split reading never promotes on its own.
+  // agrees; a genuinely split reading never promotes on its own, and neither
+  // does one that only the plain-http source stands behind.
   let stableCc = prev?.stableCc ?? null;
   let pendingCc = null;
   let changedFrom = null;
 
-  if (verdict.cc) {
-    if (!stableCc) {
-      stableCc = verdict.cc; // first reading is the baseline, nothing to announce
-    } else if (verdict.cc !== stableCc) {
-      if (verdict.strong || (verdict.unanimous && prev?.pendingCc === verdict.cc)) {
-        changedFrom = stableCc;
-        stableCc = verdict.cc;
-      } else {
-        pendingCc = verdict.cc;
-      }
-    }
-  } else {
+  if (!verdict.cc) {
     pendingCc = prev?.pendingCc ?? null;
+  } else if (!verdict.secure) {
+    // An answer fetched in the clear can have been rewritten on the way. It is
+    // noted, so that an https source saying the same next time completes the
+    // pair of readings, but it never moves the icon by itself.
+    if (verdict.cc !== stableCc) pendingCc = verdict.cc;
+  } else if (!stableCc) {
+    stableCc = verdict.cc; // first reading is the baseline, nothing to announce
+  } else if (verdict.cc !== stableCc) {
+    if (verdict.strong || (verdict.unanimous && prev?.pendingCc === verdict.cc)) {
+      changedFrom = stableCc;
+      stableCc = verdict.cc;
+    } else {
+      pendingCc = verdict.cc;
+    }
   }
 
   const state = {

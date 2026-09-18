@@ -4,13 +4,17 @@ const $ = (id) => document.getElementById(id);
 
 // Use a cheap platform hint for the first paint. The canvas/font readback used
 // to verify emoji support can stall a cold popup, so do it after it is visible.
-let flagsOk = !/^Win/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
+let flagsOk = !/^Win/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 const flag = (cc) => (flagsOk ? flagEmoji(cc) : '');
 // Joined with a no-break space, so a flag never ends up on a line without its
 // code. trim() strips it again when there is no flag to join.
 const withFlag = (cc) => `${flag(cc)}\u00a0${cc}`.trim();
 
 let current = { state: null, history: [], settings: null };
+// Bumped by every edit made here (Clear, the interval). A worker reply that was
+// requested before such an edit still carries the values from before it, and
+// must not undo it.
+let editSeq = 0;
 
 // Race guard: a late sendMessage reply must not overwrite fresher data that
 // already arrived through storage.onChanged. A backwards clock step is let
@@ -257,10 +261,12 @@ async function send(msg) {
 }
 
 async function load(msg) {
+  const seqBefore = editSeq;
   const res = await send(msg);
   if (res && !res.failure) {
-    acceptData(res.state, res.history);
-    current.settings = res.settings ?? current.settings;
+    const edited = editSeq !== seqBefore;
+    acceptData(res.state, edited ? current.history : res.history);
+    if (!edited) current.settings = res.settings ?? current.settings;
     render();
     return true;
   }
@@ -283,12 +289,14 @@ $('refresh').addEventListener('click', async () => {
 });
 
 $('clear-history').addEventListener('click', () => {
+  editSeq++;
   current.history = [];
   renderHistory(current.history);
   send({ type: 'clearHistory' });
 });
 
 $('interval').addEventListener('change', () => {
+  editSeq++;
   const intervalMin = Number($('interval').value);
   current.settings = { ...current.settings, intervalMin }; // keep the UI steady
   send({ type: 'setSettings', settings: { intervalMin } });
@@ -324,12 +332,29 @@ setInterval(() => {
   }
 }, 1000);
 
+// Asking the worker for the state is what marks a country change as seen and
+// refreshes a stale reading. It is put off until after the first paint, and
+// done from pagehide as well in case the popup is closed before that.
+let workerAsked = false;
+function askWorker() {
+  if (workerAsked) return;
+  workerAsked = true;
+  // New readings arrive through storage.onChanged while the popup stays usable.
+  load({ type: 'getState' });
+}
+addEventListener('pagehide', askWorker);
+
 async function openPopup() {
   // Read the saved reading directly: waking the worker (and repainting its
   // toolbar icon) must not be a prerequisite for showing the popup's contents.
   const before = { ...current };
+  let saved = null;
   try {
-    const saved = await chrome.storage.local.get(['state', 'history', 'settings']);
+    saved = await chrome.storage.local.get(['state', 'history', 'settings']);
+  } catch {
+    // The worker reply is the fallback when the direct read fails.
+  }
+  if (saved) {
     // Storage events or a user action may win the race with this initial read.
     // Keep those newer values, including history cleared without a new check.
     acceptData(
@@ -338,16 +363,12 @@ async function openPopup() {
     );
     if (current.settings === before.settings) current.settings = saved.settings ?? null;
     render();
-  } catch {
-    // The worker reply below is also a fallback if the direct read failed.
   }
 
   // A timer inside rAF runs after the browser has had a chance to paint; doing
   // the work in rAF itself would still put it in front of that first frame.
   await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-  // Still mark country changes as seen and refresh stale data in the worker.
-  // New readings arrive through storage.onChanged while the popup stays usable.
-  load({ type: 'getState' });
+  askWorker();
   const supported = supportsFlagEmoji();
   if (supported !== flagsOk) {
     flagsOk = supported;

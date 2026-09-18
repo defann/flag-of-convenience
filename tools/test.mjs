@@ -218,25 +218,27 @@ eq(ordered.map((r) => r.id).join(','), SOURCES.map((s) => s.id).join(','), 'prob
 // A source left out of a round is reported as skipped, not dropped: the vote
 // ignores it (no address), while the popup can still list every source along
 // with what it said in the last round it took part in.
+// Every shipped source takes part in every round now, so one is made to rest.
 const bySample = async (url) => SAMPLES[SOURCES.find((s) => s.url === url).id];
+const resting = SOURCES[0];
+const active = (s) => s !== resting;
 const fullRound = await probeAll(bySample);
-const partial = await probeAll(bySample, (s) => s.http1, fullRound);
+const partial = await probeAll(bySample, active, fullRound);
 eq(partial.length, SOURCES.length, 'a partial round still reports every source');
-eq(partial.filter((r) => r.skipped).map((r) => r.id).join(','),
-  SOURCES.filter((s) => !s.http1).map((s) => s.id).join(','), 'only the slow sources are skipped');
+eq(partial.filter((r) => r.skipped).map((r) => r.id).join(','), resting.id, 'only the resting source is skipped');
 ok(partial.filter((r) => r.skipped).every((r) => r.ip === null && r.error === 'not checked'),
   'a skipped source carries no reading of its own');
 ok(partial.filter((r) => r.skipped).every((r) => r.last?.ip === '109.204.88.1' && r.last?.cc === 'BG'),
   'a skipped source remembers its last reading');
-ok(consensus(partial).responded === http1.length, 'skipped sources do not vote');
-const partialAgain = await probeAll(bySample, (s) => s.http1, partial);
+eq(consensus(partial).responded, SOURCES.length - 1, 'skipped sources do not vote');
+const partialAgain = await probeAll(bySample, active, partial);
 ok(partialAgain.filter((r) => r.skipped).every((r) => r.last?.ip === '109.204.88.1'),
   'the last reading is carried across several partial rounds');
 const failedRound = await probeAll(async () => { throw Object.assign(new Error('t'), { name: 'TimeoutError' }); });
-const afterFailure = await probeAll(bySample, (s) => s.http1, failedRound);
+const afterFailure = await probeAll(bySample, active, failedRound);
 ok(afterFailure.filter((r) => r.skipped).every((r) => r.last?.ip === null && r.last?.error === 'timed out'),
   'a skipped source remembers a failure too');
-ok((await probeAll(bySample, (s) => s.http1)).filter((r) => r.skipped).every((r) => r.last === null),
+ok((await probeAll(bySample, active)).filter((r) => r.skipped).every((r) => r.last === null),
   'nothing to remember without a previous round');
 
 // ---------- consensus ----------
@@ -293,6 +295,22 @@ ok(r.unanimous && !r.conflict, 'no country reported is not a conflict');
 r = v(['a', null, null], ['b', null, null]);
 ok(!r.ok && r.cc === null && r.ip === null && r.ips.length === 0, 'all sources failed');
 eq(r.probed, 2, 'failed verdict still reports how many were probed');
+
+// A country that only the plain-http source reports is flagged as unbacked,
+// so it never moves the icon; one https source agreeing is enough.
+const s = (id, ip, cc, secure) => ({ id, ip, cc, secure });
+ok(consensus([s('a', '1.1.1.1', 'BG', false)]).secure === false, 'a lone insecure reading is not secure');
+ok(consensus([s('a', '1.1.1.1', 'BG', false), s('b', null, null, true)]).secure === false,
+  'https sources that failed do not back the reading');
+ok(consensus([s('a', '1.1.1.1', 'BG', false), s('b', '1.1.1.1', 'BG', true)]).secure === true,
+  'one https source agreeing backs the reading');
+ok(consensus([s('a', '1.1.1.1', 'BG', false), s('b', '2.2.2.2', 'NL', true)]).secure === false,
+  'an https source reporting another country does not back the winner');
+r = consensus([s('a', '1.1.1.1', null, false), s('b', '1.1.1.1', 'BG', true)]);
+ok(r.cc === 'BG' && r.secure, 'the winner is what has to be backed, not every reading');
+ok(consensus([s('a', '1.1.1.1', null, true)]).secure === false, 'no country, nothing backed');
+ok(consensus([s('a', null, null, true)]).secure === false, 'a failed round backs nothing');
+ok(v(['a', '1.1.1.1', 'NL']).secure, 'rows without the mark count as https');
 
 // The reported address comes from a source that agrees with the winner.
 r = v(['a', '9.9.9.9', 'GB'], ['b', '1.1.1.1', 'BG'], ['c', '1.1.1.1', 'BG']);
@@ -383,7 +401,15 @@ eq(countryName(null), 'Unknown country', 'countryName handles null');
 eq(ccColor('NL'), ccColor('NL'), 'ccColor is deterministic');
 ok(ccColor('NL') !== ccColor('BG'), 'ccColor separates countries');
 
-await import('./test-popup.mjs');
+// The popup suite throws on its first failed assertion; count it either way so
+// the tally below is always printed.
+try {
+  await import('./test-popup.mjs');
+  passed++;
+} catch (err) {
+  failed++;
+  console.error(`FAIL: popup tests\n${err?.stack ?? err}`);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -53,8 +53,11 @@ practice:
 
 A country backed by a majority is applied immediately. One that merely went
 uncontested — a single reachable source — has to be confirmed by the next check.
-A genuinely split reading is never promoted on its own. The toolbar icon follows
-the confirmed country, so it does not flicker while sources disagree.
+A genuinely split reading is never promoted on its own, and neither is one that
+only `ip-api.com` stands behind: its answer arrives in the clear and could have
+been rewritten on the way, so the icon only ever changes once an https source
+reports the same country. The toolbar icon follows the confirmed country, so it
+does not flicker while sources disagree.
 
 ### Connections that outlive a VPN switch
 

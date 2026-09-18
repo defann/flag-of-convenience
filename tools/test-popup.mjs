@@ -7,7 +7,7 @@ import vm from 'node:vm';
 import { flagEmoji, countryName, ccColor } from '../lib/flags.js';
 
 const script = (await readFile(new URL('../popup/popup.js', import.meta.url), 'utf8'))
-  .replace(/^import .+;$/m, '');
+  .replace(/^import .+;$/gm, '');
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 const deferred = () => {
   let resolve, reject;
@@ -51,10 +51,11 @@ function open({ storage = Promise.resolve(cached), platform = 'MacIntel', emoji 
   get('hero-country').textContent = 'Checking…';
   get('interval').value = '15';
   get('error-box').classList.add('hidden');
-  const frames = [], timers = [], messages = [];
+  const frames = [], timers = [], messages = [], windowListeners = {};
   const worker = deferred();
   let changed, probes = 0;
   vm.runInNewContext(script, {
+    addEventListener: (type, callback) => { windowListeners[type] = callback; },
     flagEmoji, countryName, ccColor,
     supportsFlagEmoji: () => { probes++; return emoji; },
     navigator: { platform },
@@ -76,7 +77,7 @@ function open({ storage = Promise.resolve(cached), platform = 'MacIntel', emoji 
     clearTimeout() {}, setInterval() {},
   }, { filename: 'popup.js' });
   return {
-    get, frames, timers, messages, worker,
+    get, frames, timers, messages, worker, windowListeners,
     get probes() { return probes; },
     change: (changes) => changed(changes, 'local'),
     async paint() {
@@ -126,6 +127,36 @@ function open({ storage = Promise.resolve(cached), platform = 'MacIntel', emoji 
   assert.equal(popup.get('hero-country').textContent, 'France (FR)');
   assert.equal(popup.get('history').children.length, 0);
   assert.equal(popup.get('interval').value, '60');
+}
+
+// A worker reply requested before the user cleared the history or changed the
+// interval carries the values from before, and must not undo the edit.
+{
+  const popup = open();
+  await turn();
+  await popup.paint();
+  popup.get('clear-history').listeners.click();
+  popup.get('interval').value = '60';
+  popup.get('interval').listeners.change();
+  popup.worker.resolve(cached);
+  await turn();
+  assert.equal(popup.get('history').children.length, 0, 'a late worker reply does not restore cleared history');
+  assert.equal(popup.get('interval').value, '60', 'a late worker reply does not revert the interval');
+  assert.equal(popup.get('hero-country').textContent, 'Netherlands (NL)', 'the reading itself is still taken');
+}
+
+// Closing the popup before its first frame still counts as having opened it:
+// the worker is asked for the state (which is what clears the dot) on the way
+// out, and no second time when the frame never comes.
+{
+  const popup = open();
+  await turn();
+  assert.equal(popup.messages.length, 0);
+  popup.windowListeners.pagehide();
+  assert.equal(popup.messages.length, 1, 'pagehide before the first paint still wakes the worker');
+  assert.equal(popup.messages[0].type, 'getState');
+  await popup.paint();
+  assert.equal(popup.messages.length, 1, 'the worker is asked once');
 }
 
 // First installation and a failed direct read both retain the worker fallback.
