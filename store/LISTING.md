@@ -17,14 +17,14 @@ attached to the GitHub release).
 
 ## 1. Package
 
-Upload `dist/flag-of-convenience-2.3.0.zip` under **Items → Add new item**.
+Upload `dist/flag-of-convenience-2.4.0.zip` under **Items → Add new item**.
 
 Facts a reviewer will check, and where they come from:
 
 | Field | Value |
 | --- | --- |
 | Manifest version | 3 |
-| Version | 2.3.0 |
+| Version | 2.4.0 |
 | Permissions | `alarms`, `storage` |
 | Optional permissions | none |
 | Host permissions | none |
@@ -64,7 +64,7 @@ WHAT YOU GET
 
 HOW THE COUNTRY IS DECIDED
 
-Each check asks six independent public services in parallel — country.is, GeoJS, seeip.org, ip-api.com, myip.com and checkip.now — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
+Each check asks three independent public services in parallel — seeip.org, ip-api.com and checkip.now — and the country is decided by majority vote. This matters in practice: single services go down for hours, and behind a VPN pool two requests a second apart can leave through different addresses. A country backed by a majority is applied at once; one that merely went uncontested has to be confirmed by the next check, so the icon does not flicker while sources disagree.
 
 PRIVACY
 
@@ -124,7 +124,7 @@ it did not ship with; it only fetches JSON data over HTTPS.
 certify the three statements (data is not sold, not used for purposes unrelated
 to the single purpose, not used to determine creditworthiness or for lending).
 
-The six public services necessarily observe the requesting IP address in order
+The three public services necessarily observe the requesting IP address in order
 to answer — any HTTP request reveals it — but that is the service answering the
 user's own request, not the developer collecting anything. This is spelled out
 in the privacy policy.

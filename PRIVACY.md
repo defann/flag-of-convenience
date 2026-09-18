@@ -34,11 +34,8 @@ this extension. There is no account, no identifier, and no tracking.
 
 Each check contacts these endpoints:
 
-- `https://api.country.is/` — country.is
-- `https://get.geojs.io/v1/ip/country.json` — GeoJS
 - `https://api.seeip.org/geoip` — seeip.org
 - `http://ip-api.com/json/?fields=status,message,countryCode,query` — ip-api.com
-- `https://api.myip.com/` — myip.com
 - `https://api.checkip.now/` — checkip.now
 
 Requests are GET only, are sent with `credentials: 'omit'`, and carry no

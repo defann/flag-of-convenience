@@ -2,9 +2,10 @@ import { flagEmoji, countryName, supportsFlagEmoji, ccColor } from '../lib/flags
 
 const $ = (id) => document.getElementById(id);
 
-// Windows Chrome does not draw flag emoji, so fall back to country codes there.
-const FLAGS_OK = supportsFlagEmoji();
-const flag = (cc) => (FLAGS_OK ? flagEmoji(cc) : '');
+// Use a cheap platform hint for the first paint. The canvas/font readback used
+// to verify emoji support can stall a cold popup, so do it after it is visible.
+let flagsOk = !/^Win/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
+const flag = (cc) => (flagsOk ? flagEmoji(cc) : '');
 // Joined with a no-break space, so a flag never ends up on a line without its
 // code. trim() strips it again when there is no flag to join.
 const withFlag = (cc) => `${flag(cc)}\u00a0${cc}`.trim();
@@ -199,7 +200,7 @@ function render() {
   // reading should not rename the country under the user.
   const shown = state.stableCc ?? state.cc ?? null;
   const hero = $('hero-flag');
-  if (FLAGS_OK || !shown) {
+  if (flagsOk || !shown) {
     hero.textContent = flagEmoji(shown); // 🌐 exists on every platform
     hero.classList.remove('as-badge');
     hero.style.background = '';
@@ -323,6 +324,35 @@ setInterval(() => {
   }
 }, 1000);
 
-// Opening the popup is also what marks the latest country change as seen: the
-// background takes the dot off the icon when it answers this.
-load({ type: 'getState' });
+async function openPopup() {
+  // Read the saved reading directly: waking the worker (and repainting its
+  // toolbar icon) must not be a prerequisite for showing the popup's contents.
+  const before = { ...current };
+  try {
+    const saved = await chrome.storage.local.get(['state', 'history', 'settings']);
+    // Storage events or a user action may win the race with this initial read.
+    // Keep those newer values, including history cleared without a new check.
+    acceptData(
+      current.state === before.state ? saved.state : current.state,
+      current.history === before.history ? saved.history : current.history,
+    );
+    if (current.settings === before.settings) current.settings = saved.settings ?? null;
+    render();
+  } catch {
+    // The worker reply below is also a fallback if the direct read failed.
+  }
+
+  // A timer inside rAF runs after the browser has had a chance to paint; doing
+  // the work in rAF itself would still put it in front of that first frame.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  // Still mark country changes as seen and refresh stale data in the worker.
+  // New readings arrive through storage.onChanged while the popup stays usable.
+  load({ type: 'getState' });
+  const supported = supportsFlagEmoji();
+  if (supported !== flagsOk) {
+    flagsOk = supported;
+    render();
+  }
+}
+
+openPopup();

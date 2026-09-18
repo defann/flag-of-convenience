@@ -121,9 +121,6 @@ eq(normalize({ ip: '2606:4700::1%eth0', cc: 'US' })?.ip, '2606:4700::1', 'normal
 
 // Every source parser understands a real-world response body.
 const SAMPLES = {
-  'country.is': { ip: '109.204.88.1', country: 'BG' },
-  'geojs.io': { country: 'BG', country_3: 'BGR', ip: '109.204.88.1', name: 'Bulgaria' },
-  'myip.com': { ip: '109.204.88.1', country: 'Bulgaria', cc: 'BG' },
   'seeip.org': { ip: '109.204.88.1', country: 'Bulgaria', country_code: 'BG', country_code3: 'BGR' },
   'ip-api.com': { status: 'success', countryCode: 'BG', query: '109.204.88.1' },
   'checkip.now': { ip: '109.204.88.1', country: 'Bulgaria', cc: 'BG' },
@@ -140,7 +137,7 @@ for (const source of SOURCES) {
 }
 
 // probeSource never throws and reports failures as data.
-const probeOk = await probeSource(SOURCES[0], async () => ({ ip: '1.1.1.1', country: 'AU' }));
+const probeOk = await probeSource(SOURCES[0], async () => ({ ...SAMPLES[SOURCES[0].id], ip: '1.1.1.1', country_code: 'AU' }));
 ok(probeOk.ip === '1.1.1.1' && probeOk.cc === 'AU' && !probeOk.error, 'probeSource success');
 const probeFail = await probeSource(SOURCES[0], async () => { throw new Error('boom'); });
 ok(probeFail.ip === null && probeFail.error === 'failed', 'probeSource failure');
@@ -169,11 +166,13 @@ eq((await probeSource(SOURCES[0], async () => {
 })).error, 'timed out', 'timeout gets a readable label');
 
 // Answers from an HTTP/1.1 source are marked fresh, because its socket is the
-// one dropConnections() closes after every check.
+// one dropConnections() closes after every check. Every shipped source is one,
+// so the other case is checked on a source that only exists here.
 const http1 = SOURCES.filter((s) => s.http1);
 ok(http1.length >= 1, 'at least one source is kept on HTTP/1.1');
 ok((await probeSource(http1[0], async () => SAMPLES[http1[0].id])).fresh, 'HTTP/1.1 answers are marked fresh');
-ok(!(await probeSource(SOURCES[0], async () => SAMPLES[SOURCES[0].id])).fresh, 'HTTP/2 answers are not marked fresh');
+const h2Source = { id: 'h2', url: 'https://h2.example/', parse: (d) => d };
+ok(!(await probeSource(h2Source, async () => ({ ip: '1.1.1.1', cc: 'AU' }))).fresh, 'HTTP/2 answers are not marked fresh');
 ok((await probeSource(http1[0], async () => { throw new Error('x'); })).fresh, 'the mark survives a failed probe');
 
 const insecureSource = SOURCES.find((s) => s.insecure);
@@ -383,6 +382,8 @@ eq(countryName('N'), 'N', 'countryName survives an invalid code');
 eq(countryName(null), 'Unknown country', 'countryName handles null');
 eq(ccColor('NL'), ccColor('NL'), 'ccColor is deterministic');
 ok(ccColor('NL') !== ccColor('BG'), 'ccColor separates countries');
+
+await import('./test-popup.mjs');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

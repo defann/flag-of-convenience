@@ -15,7 +15,8 @@ looking, and the tunnel probably dropped.
   readable at 16 px (a country-code badge is used on Windows, where Chrome does
   not render flag emoji).
 - Popup with every exit address seen in the current check, what each source
-  reported, how many of them agreed, and click-to-copy on each address.
+  reported, how many of them agreed, and click-to-copy on each address. Opens
+  with the saved reading while the background worker wakes and checks stale data.
 - A red dot in the corner of the icon when the exit country changes. It stays
   until the popup is opened, and the icon's tooltip says which country it was
   before. No notification permission, no system banner to go missing.
@@ -31,23 +32,20 @@ looking, and the tunnel probably dropped.
 
 ## How it works
 
-Every check queries six independent services in parallel, each returning the
+Every check queries three independent services in parallel, each returning the
 exit IP and its country in one response:
 
 | Source | Endpoint | |
 | --- | --- | --- |
-| country.is | `https://api.country.is/` | |
-| GeoJS | `https://get.geojs.io/v1/ip/country.json` | |
 | seeip.org | `https://api.seeip.org/geoip` | HTTP/1.1, connection dropped after every check |
 | ip-api.com | `http://ip-api.com/json/?fields=status,message,countryCode,query` | HTTP/1.1, connection dropped after every check |
-| myip.com | `https://api.myip.com/` | |
 | checkip.now | `https://api.checkip.now/` | HTTP/1.1, connection dropped after every check |
 
 The country is decided by majority vote, which matters for two reasons found in
 practice:
 
-- **Single services go down.** `api.myip.com` was unreachable for hours during
-  development; one source is not enough to rely on.
+- **Single services go down.** During development one of the services used at
+  the time was unreachable for hours; one source is not enough to rely on.
 - **Exit IPs rotate.** Behind a VPN pool, two requests a second apart can leave
   through different addresses, and dual-stack services may see you over IPv4 or
   IPv6. No single "current IP" exists, so the popup lists every address that was
@@ -69,32 +67,12 @@ the wrong answer is genuinely fetched, over the wrong route.
 The only lever an extension has over the socket pool is an aborted request: an
 unfinished exchange leaves the connection unusable, so Chrome closes it and the
 next check has to dial out again. That works on HTTP/1.1 only — over HTTP/2 an
-abort resets a single stream and leaves the session open — so three sources are
-deliberately kept on servers that speak HTTP/1.1, and their sockets are dropped
-after every check. `seeip.org` and `checkip.now` speak it over https;
+abort resets a single stream and leaves the session open — so all three sources
+are deliberately kept on servers that speak HTTP/1.1, and their sockets are
+dropped after every check. `seeip.org` and `checkip.now` speak it over https;
 `ip-api.com` offers nothing but plain http on its free tier, which is exactly
-what pins it to HTTP/1.1.
-
-The other three cannot be closed that way, so instead they are left alone: a
-full round is run at most once every five minutes, whatever the check interval,
-and the checks in between rest on the HTTP/1.1 trio. A connection only closes
-while nothing is asking it anything, so the pause is what keeps those sources
-from being stuck on one socket forever when checks run every minute.
-
-Those three are therefore the only ones certain to have answered over the
-current route. Two of them agreeing is already a majority of a partial round, so
-a country change between full rounds no longer has to wait for one. When they
-all agree with each other, and every remaining source reports both
-a different address *and* a different country, the others are answering over
-sockets that outlived a network change: their majority is a majority about the
-past, and it is overruled at once instead of waiting for agreement that would
-never arrive. One shared address with two countries stays what it always was —
-the geo databases disagreeing — and several addresses in one country stay a
-rotating exit pool.
-
-An answer fetched over plain http can be rewritten in transit, so it never
-carries that decision alone: at least one of the agreeing fresh readings has to
-have arrived over https before the rest are declared stale.
+what pins it to HTTP/1.1. Every answer is therefore certain to have come over
+the route in use at the time of the check.
 
 ### Privacy properties
 
@@ -170,6 +148,7 @@ lib/flags.js         flag emoji, country names, toolbar icon and its dot
 popup/               popup UI
 store/               Chrome Web Store listing assets (not shipped in the zip)
 tools/test.mjs       unit tests
+tools/test-popup.mjs popup startup tests against the real popup script
 tools/make-icons.py  icon generator
 tools/make-store-assets.mjs  listing screenshots and promo tile
 tools/pack.mjs       upload package builder
@@ -177,10 +156,6 @@ tools/pack.mjs       upload package builder
 
 ## Data sources and credits
 
-- **country.is** — free for any use, no quota. Its data includes GeoLite data
-  created by MaxMind, available from https://www.maxmind.com.
-- **GeoJS** (geojs.io) — free, no rate limits; the default 15-minute interval
-  keeps the load to roughly 96 requests per user per day.
 - **seeip.org** — free and open source, with no request limit stated. It is also
   served over HTTP/1.1, which is what lets the extension drop its connection
   between checks.
@@ -190,12 +165,9 @@ tools/pack.mjs       upload package builder
   HTTP/1.1. The query asks for `status`, `message`, `countryCode` and `query`
   rather than a full profile. Some ranges fall back to GeoLite2 data created by
   MaxMind, available from https://www.maxmind.com.
-- **myip.com** — free with no request limit; the author asks for credit, which
-  this section provides.
 - **checkip.now** — free JSON endpoint of the checkip.now diagnostics page, with
-  no limits or terms published. Answers over https with the same `ip` and `cc`
-  fields as myip.com, and over HTTP/1.1, which is what lets the extension drop
-  its connection between checks.
+  no limits or terms published. Answers over https and over HTTP/1.1, which is
+  what lets the extension drop its connection between checks.
 
 ## License
 

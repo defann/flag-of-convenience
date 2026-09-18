@@ -30,13 +30,10 @@ const SCENES = {
     state: {
       ip: '109.204.88.1', cc: 'BG', stableCc: 'BG',
       ips: ['109.204.88.1'], countries: ['BG'], conflict: false, sameIp: true,
-      votes: 5, total: 5, responded: 5,
+      votes: 2, total: 2, responded: 2,
       sources: [
-        { id: 'country.is', ip: '109.204.88.1', cc: 'BG', error: null },
-        { id: 'geojs.io', ip: '109.204.88.1', cc: 'BG', error: null },
         { id: 'seeip.org', ip: '109.204.88.1', cc: 'BG', error: null },
-        { id: 'ip-api.com', ip: '109.204.88.1', cc: 'BG', error: null },
-        { id: 'myip.com', ip: null, cc: null, error: 'timed out' },
+        { id: 'ip-api.com', ip: null, cc: null, error: 'timed out' },
         { id: 'checkip.now', ip: '109.204.88.1', cc: 'BG', error: null },
       ],
       checkedAt: now - 42_000, error: null, errorAt: null,
@@ -51,13 +48,10 @@ const SCENES = {
     state: {
       ip: '45.87.213.19', cc: 'NL', stableCc: 'NL',
       ips: ['45.87.213.19', '185.199.108.153'], countries: ['NL'],
-      conflict: false, sameIp: false, votes: 6, total: 6, responded: 6,
+      conflict: false, sameIp: false, votes: 3, total: 3, responded: 3,
       sources: [
-        { id: 'country.is', ip: '45.87.213.19', cc: 'NL', error: null },
-        { id: 'geojs.io', ip: '185.199.108.153', cc: 'NL', error: null },
         { id: 'seeip.org', ip: '45.87.213.19', cc: 'NL', error: null },
         { id: 'ip-api.com', ip: '185.199.108.153', cc: 'NL', error: null },
-        { id: 'myip.com', ip: '45.87.213.19', cc: 'NL', error: null },
         { id: 'checkip.now', ip: '45.87.213.19', cc: 'NL', error: null },
       ],
       checkedAt: now - 8_000, error: null, errorAt: null,
@@ -69,13 +63,10 @@ const SCENES = {
     state: {
       ip: '91.108.12.45', cc: 'CH', stableCc: 'CH',
       ips: ['91.108.12.45', '77.244.32.8'], countries: ['CH', 'DE'],
-      conflict: true, sameIp: false, votes: 4, total: 6, responded: 6,
+      conflict: true, sameIp: false, votes: 2, total: 3, responded: 3,
       sources: [
-        { id: 'country.is', ip: '91.108.12.45', cc: 'CH', error: null },
-        { id: 'geojs.io', ip: '77.244.32.8', cc: 'DE', error: null },
         { id: 'seeip.org', ip: '91.108.12.45', cc: 'CH', error: null },
-        { id: 'ip-api.com', ip: '91.108.12.45', cc: 'CH', error: null },
-        { id: 'myip.com', ip: '77.244.32.8', cc: 'DE', error: null },
+        { id: 'ip-api.com', ip: '77.244.32.8', cc: 'DE', error: null },
         { id: 'checkip.now', ip: '91.108.12.45', cc: 'CH', error: null },
       ],
       checkedAt: now - 15_000, error: null, errorAt: null,
@@ -95,8 +86,8 @@ const SHOTS = [
   {
     file: 'screenshot-2-sources.png',
     scene: 'rotation',
-    title: 'Six sources, one answer',
-    body: 'Services go down and VPN pools rotate addresses. Every check asks six independent services and takes the majority, so one flaky answer cannot flip your flag.',
+    title: 'Three sources, one answer',
+    body: 'Services go down and VPN pools rotate addresses. Every check asks three independent services and takes the majority, so one flaky answer cannot flip your flag.',
   },
   {
     file: 'screenshot-3-leak.png',
@@ -182,14 +173,17 @@ const PROMO = `<!doctype html><meta charset="utf-8"><style>
   <div class="flags">🇳🇱 🇩🇪 🇧🇬 🇨🇭 🇯🇵</div>
 </body>`;
 
-// The popup reads its data through chrome.runtime; this stands in for it.
+// Stand in for the popup's saved reading and background worker.
 function stub() {
   return `const SCENES = ${JSON.stringify(SCENES)};
 const scene = new URLSearchParams(location.search).get('scene') || 'main';
 const data = SCENES[scene];
 window.chrome = {
   runtime: { sendMessage: async () => data },
-  storage: { onChanged: { addListener() {} } },
+  storage: {
+    local: { get: async () => data },
+    onChanged: { addListener() {} },
+  },
 };`;
 }
 
