@@ -17,14 +17,14 @@ attached to the GitHub release).
 
 ## 1. Package
 
-Upload `dist/flag-of-convenience-2.4.0.zip` under **Items → Add new item**.
+Upload `dist/flag-of-convenience-2.4.1.zip` under **Items → Add new item**.
 
 Facts a reviewer will check, and where they come from:
 
 | Field | Value |
 | --- | --- |
 | Manifest version | 3 |
-| Version | 2.4.0 |
+| Version | 2.4.1 |
 | Permissions | `alarms`, `storage` |
 | Optional permissions | none |
 | Host permissions | none |

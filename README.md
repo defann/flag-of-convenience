@@ -110,8 +110,12 @@ the store, so double-clicking the archive will not work — this is the path:
    so the flag is always visible.
 
 The first check runs immediately; the flag replaces the placeholder icon within
-a few seconds. To update later, download the new zip, unpack it over the same
-folder and press the reload arrow on the extension's card.
+a few seconds. To update later, download the new zip, unpack it and load the
+new folder the same way: the manifest carries a fixed `key`, so Chrome gives the
+extension the same ID from any folder, replaces the old installation with the
+new one, and keeps the settings and the country history. The old folder can go
+afterwards. (Unpacking the new zip over the old folder and pressing the reload
+arrow on the extension's card works too.)
 
 Chrome shows a "Disable developer mode extensions" warning at startup for any
 unpacked extension. It is about how the extension was installed, not about what
@@ -121,9 +125,13 @@ it does, and it goes away once the extension is installed from the store.
 
 ```bash
 git clone https://github.com/defann/flag-of-convenience.git
+cd flag-of-convenience && npm run pack
 ```
 
-Then load the cloned folder with **Load unpacked** as above.
+Then unzip `dist/flag-of-convenience-<version>.zip` and load the unzipped
+folder with **Load unpacked** as above. The clone itself cannot be loaded:
+Chrome refuses any extension folder with a file whose name starts with `_`,
+and `_config.yml` is what builds the project page.
 
 Requires Chrome 111 or newer (`chrome.alarms` promises, `AbortSignal.timeout`).
 

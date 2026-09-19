@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Flag of Convenience",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Shows the flag of the country your traffic appears to come from, an at-a-glance VPN and proxy check in your toolbar.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5Lzo8f52B3JoB3i06k+GEkCkB59au2bir9dUG0m2MNWnrHz/uenAF26/0JlL40aDOBcz5qGRrSjvjfleoQw5RDXryS3ezmN4+51QR5WV2YigMhPfgH8ObUlm8cGyhcRFxWdCK14bCbWyQLVMgPKi5tbdLeegpPppZSNaMR0LW7spZY4ZAzsx/HIjhYUCz7bw7JyfyODojNBEDy8wfuUJRzCuE+l68T9uqTt1VeOFW0qCmU2RBQYsvS1a5Bb9K8MIKp60EwWnFMq86sNiAxTcBubm5JEabFWHxOBO1RuKd22QhYS6oIX6+C05jZ7Dh097453rQ5T9/ijyCbh94T1KsQIDAQAB",
   "minimum_chrome_version": "111",
   "permissions": ["alarms", "storage"],
   "background": {
